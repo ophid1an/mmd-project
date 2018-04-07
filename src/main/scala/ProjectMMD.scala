@@ -1,7 +1,5 @@
 import org.apache.spark.sql.SparkSession
 
-case class Basket(b: Array[String])
-
 object ProjectMMD {
   def main(args: Array[String]): Unit = {
     // Create spark session
@@ -11,16 +9,13 @@ object ProjectMMD {
       .master("local[*]")
       .getOrCreate()
 
-    val sc = spark.sparkContext
+    val sc = spark.sparkContext // Spark context
 
     // Suppress info messages
     sc.setLogLevel("ERROR")
 
     val groceriesFilename = "groceries.csv"
     val productsFilename = "products-categorized.csv"
-
-    //    val basketsDF = spark.read.format("csv").load(groceriesFilename)
-    //    val productsDF = spark.read.format("csv").load(productsFilename)
 
     val basketsRDD = sc.
       textFile(groceriesFilename).
@@ -43,17 +38,14 @@ object ProjectMMD {
       cache()
 
 
-    showStatistics()
+    displayStats()
 
     spark.stop()
 
-    def showStatistics(): Unit = {
+    def displayStats(): Unit = {
       val basketsCnt = basketsRDD.count()
-      val basketsSizes = basketsRDD.map(_.size)
+      val basketsSizes = basketsRDD.map(_.length)
       val productsCnt = productsRDD.count()
-
-      //  basketsRDD.reduce((x1, x2) => (x1.toBuffer ++= x2).toArray)
-      //  productsRDD.reduce((x1, x2) => (Array(x1(0)).toBuffer ++= Array(x2(0))).toArray)
 
       println("**********")
       println("Statistics")
