@@ -1,10 +1,13 @@
 package project.customer
 
-case class Spending[A](vec: Map[A, Double])  {
+case class Spending[A](vec: Map[A, Double]) {
   def cnt: Double = vec.values.sum
 
   def ++(other: Spending[A]): Spending[A] =
     this.copy(mergeMaps(vec, other.vec))
+
+  def *(other: Map[A, Double]): Spending[A] =
+    this.copy(vec.keys.toList.map(k => k -> (vec.getOrElse(k, 0.0) * other.getOrElse(k, 1.0))).toMap)
 
   def fractional: Spending[A] = this.copy(vec.mapValues(_ / cnt))
 

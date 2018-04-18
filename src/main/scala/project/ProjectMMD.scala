@@ -55,7 +55,10 @@ object ProjectMMD {
       )
       .cache()
 
-    def computeCustomers: Map[Int, Customer[Int, String]] = {
+    def computeCustomers
+    : (Map[Int, Customer[Int, String]],
+      Map[Int, Customer[Int, String]],
+      Map[Int, Customer[Int, String]]) = {
       val productsMap = productsRDD.collect().map(x => (x._1, Product(x._1, x._2))).toMap
       val productsMapB = sc.broadcast(productsMap)
 
@@ -78,17 +81,35 @@ object ProjectMMD {
 
       val fractionalCustomers = customers.mapValues(c => Customer(c.id, c.spending.fractional))
 
-      assert(fractionalCustomers.size ==
+      val customersCard = customers.size
+
+      assert(customersCard ==
         fractionalCustomers.values.foldLeft(0.0)(_ + _.spending.vec.values.sum)
       )
 
-      fractionalCustomers
+      val FractionalSpendingsTotal = fractionalCustomers.values
+        .map(_.spending).reduce(_ ++ _)
+
+      val adjustedFractionalSpendingsTotal = FractionalSpendingsTotal
+        .vec.mapValues(customersCard / _)
+
+      val normalizedFractionalCustomers = fractionalCustomers.mapValues(
+        c => Customer(c.id, c.spending * adjustedFractionalSpendingsTotal)
+      )
+
+      (customers, fractionalCustomers, normalizedFractionalCustomers)
     }
 
-    val customers = computeCustomers
+    val (customers, fractionalCustomers, normalizedFractionalCustomers) =
+      computeCustomers
 
     // Print customers
-    customers.foreach(println)
+    println("\n************ Customers ****************\n")
+    customers.take(5).foreach(println)
+    println("\n******** Fractional Customers *********\n")
+    fractionalCustomers.take(5).foreach(println)
+    println("\n*** Normalized Fractional Customers ***\n")
+    normalizedFractionalCustomers.take(5).foreach(println)
 
     // Display statistics
     //    displayStats(basketsRDD, productsRDD)
