@@ -1,10 +1,9 @@
 package project
 
-import org.apache.spark.SparkContext
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.SparkSession
-import project.customer._
-import project.product._
+import project.customer.{Customer, Spending}
+import project.product.Product
 
 object ProjectMMD {
 
@@ -62,7 +61,7 @@ object ProjectMMD {
 
       val assignedCustomersRDD = basketsRDD
         .map(_.map(productsMapB.value.getOrElse(_, Product()).subCl))
-        .map(Customer(getRandomId, Map[String, Double]()) + _)
+        .map(Customer(getRandomId, Spending[String]()) + Spending(_: _*))
         .map(customer => customer.id -> customer)
 
       val customersRDD = assignedCustomersRDD.reduceByKey(_ ++ _)
@@ -70,17 +69,17 @@ object ProjectMMD {
       val customers = customersRDD.collect().toMap
 
       assert(basketsRDD.map(_.length).sum ==
-        customers.values.foldLeft(0.0)(_ + _.vec.values.sum)
+        customers.values.foldLeft(0.0)(_ + _.spending.vec.values.sum)
       )
 
       assert(basketsRDD.map(_.length).sum ==
-        customers.values.foldLeft(0.0)(_ + _.cnt)
+        customers.values.foldLeft(0.0)(_ + _.spending.cnt)
       )
 
-      val fractionalCustomers = customers.mapValues(_.fractional)
+      val fractionalCustomers = customers.mapValues(c => Customer(c.id, c.spending.fractional))
 
       assert(fractionalCustomers.size ==
-        fractionalCustomers.values.foldLeft(0.0)(_ + _.vec.values.sum)
+        fractionalCustomers.values.foldLeft(0.0)(_ + _.spending.vec.values.sum)
       )
 
       fractionalCustomers
