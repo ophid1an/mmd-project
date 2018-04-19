@@ -79,7 +79,7 @@ object ProjectMMD {
         customers.values.foldLeft(0.0)(_ + _.spending.cnt)
       )
 
-      val fractionalCustomers = customers.mapValues(c => Customer(c.id, c.spending.fractional))
+      val fractionalCustomers = customers.mapValues(_.fractional)
 
       val customersCard = customers.size
 
@@ -87,11 +87,11 @@ object ProjectMMD {
         fractionalCustomers.values.foldLeft(0.0)(_ + _.spending.vec.values.sum)
       )
 
-      val FractionalSpendingsTotal = fractionalCustomers.values
+      val fractionalSpendingsTotal = fractionalCustomers.values
         .map(_.spending).reduce(_ ++ _)
 
-      val adjustedFractionalSpendingsTotal = FractionalSpendingsTotal
-        .vec.mapValues(customersCard / _)
+      val adjustedFractionalSpendingsTotal = fractionalSpendingsTotal.vec
+        .mapValues(customersCard / _)
 
       val normalizedFractionalCustomers = fractionalCustomers.mapValues(
         c => Customer(c.id, c.spending * adjustedFractionalSpendingsTotal)

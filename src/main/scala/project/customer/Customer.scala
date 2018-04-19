@@ -5,6 +5,11 @@ case class Customer[A, B](id: A, spending: Spending[B]) {
     this.copy(spending = this.spending ++ spending)
 
   def ++(other: Customer[A, B]): Customer[A, B] =
-    if (id == other.id) this.copy(spending = this.spending ++ other.spending)
-    else sys.error("Customer.++ with a different ID.")
+    if (id == other.id)
+      this.copy(spending = this.spending ++ other.spending)
+    else
+      sys.error("Customer.++ with a different ID.")
+
+  def fractional: Customer[A, B] =
+    this.copy(spending = this.spending.fractional)
 }
