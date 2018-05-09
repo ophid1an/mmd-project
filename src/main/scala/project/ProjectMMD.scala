@@ -59,11 +59,23 @@ object ProjectMMD {
     : (Map[Int, Customer[Int, String]],
       Map[Int, Customer[Int, String]],
       Map[Int, Customer[Int, String]]) = {
-      val productsMap = productsRDD.collect().map(x => (x._1, Product(x._1, x._2))).toMap
+      val productsMap = productsRDD.collect()
+        .map { case (name, taxonomy) => (name, Product(name, taxonomy)) }.toMap
+
+      val classesMap: Map[String, List[String]] =
+        invertMap(productsMap
+          .map { case (_, taxonomy) => taxonomy.subCl -> taxonomy.cl }
+        )
+
+      val subClassesMap: Map[String, List[String]] =
+        invertMap(productsMap
+          .map { case (name, taxonomy) => name -> taxonomy.subCl }
+        )
+
       val productsMapB = sc.broadcast(productsMap)
 
       val assignedCustomersRDD = basketsRDD
-        .map(_.map(productsMapB.value.getOrElse(_, Product()).subCl))
+        .map(b => b.map(bItem => productsMapB.value.getOrElse(bItem, Product()).subCl))
         .map(Customer(getRandomId, Spending[String]()) + Spending(_: _*))
         .map(customer => customer.id -> customer)
 
