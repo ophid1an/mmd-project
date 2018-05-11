@@ -55,6 +55,46 @@ object ProjectMMD {
       )
       .cache()
 
+    def displayStats(baskets: RDD[Array[String]], products: RDD[(String, Array[String])]): Unit = {
+      val basketsCnt = baskets.count()
+      val basketsSizes = baskets.map(_.length)
+      val productsCnt = products.count()
+
+      println("**********")
+      println("Statistics")
+      println("**********")
+
+      println("\nBaskets")
+      println("------------------------------")
+      println("Count: " + basketsCnt)
+
+      println("First 5 baskets: ")
+      for (i <- baskets.take(5)) println("\t" + i.mkString(", "))
+
+      println("First 5 baskets sizes: " + basketsSizes.take(5).mkString(", "))
+      println("Min size: " + basketsSizes.min())
+      println("Max size: " + basketsSizes.max())
+      println("Mean size: " + basketsSizes.mean())
+
+      println("\nProducts")
+      println("------------------------------")
+      println("Count: " + productsCnt)
+
+      println("First 5 products: ")
+      for (i <- products.take(5)) println("\t" + i._1 + " -> " + i._2.mkString(", "))
+    }
+
+    def invertMap[A, B](inputMap: Map[A, B]): Map[B, List[A]] = {
+      inputMap.foldLeft(Map[B, List[A]]()) {
+        case (mapAccumulator, (value, key)) =>
+          if (mapAccumulator.contains(key)) {
+            mapAccumulator.updated(key, mapAccumulator(key) :+ value)
+          } else {
+            mapAccumulator.updated(key, List(value))
+          }
+      }
+    }
+
     def computeCustomers
     : (Map[Int, Customer[Int, String]],
       Map[Int, Customer[Int, String]],
@@ -127,45 +167,5 @@ object ProjectMMD {
     //    displayStats(basketsRDD, productsRDD)
 
     spark.stop()
-  }
-
-  def displayStats(baskets: RDD[Array[String]], products: RDD[(String, Array[String])]): Unit = {
-    val basketsCnt = baskets.count()
-    val basketsSizes = baskets.map(_.length)
-    val productsCnt = products.count()
-
-    println("**********")
-    println("Statistics")
-    println("**********")
-
-    println("\nBaskets")
-    println("------------------------------")
-    println("Count: " + basketsCnt)
-
-    println("First 5 baskets: ")
-    for (i <- baskets.take(5)) println("\t" + i.mkString(", "))
-
-    println("First 5 baskets sizes: " + basketsSizes.take(5).mkString(", "))
-    println("Min size: " + basketsSizes.min())
-    println("Max size: " + basketsSizes.max())
-    println("Mean size: " + basketsSizes.mean())
-
-    println("\nProducts")
-    println("------------------------------")
-    println("Count: " + productsCnt)
-
-    println("First 5 products: ")
-    for (i <- products.take(5)) println("\t" + i._1 + " -> " + i._2.mkString(", "))
-  }
-
-  def invertMap[A, B](inputMap: Map[A, B]): Map[B, List[A]] = {
-    inputMap.foldLeft(Map[B, List[A]]()) {
-      case (mapAccumulator, (value, key)) =>
-        if (mapAccumulator.contains(key)) {
-          mapAccumulator.updated(key, mapAccumulator(key) :+ value)
-        } else {
-          mapAccumulator.updated(key, List(value))
-        }
-    }
   }
 }
