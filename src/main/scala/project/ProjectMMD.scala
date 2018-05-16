@@ -3,7 +3,8 @@ package project
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.SparkSession
 import project.customer.{Customer, Spending}
-import project.product.Product
+import project.product.{Product, Taxonomy}
+
 
 object ProjectMMD {
 
@@ -84,39 +85,19 @@ object ProjectMMD {
       for (i <- products.take(5)) println("\t" + i._1 + " -> " + i._2.mkString(", "))
     }
 
-    def invertMap[A, B](inputMap: Map[A, B]): Map[B, List[A]] = {
-      inputMap.foldLeft(Map[B, List[A]]()) {
-        case (mapAccumulator, (value, key)) =>
-          if (mapAccumulator.contains(key)) {
-            mapAccumulator.updated(key, mapAccumulator(key) :+ value)
-          } else {
-            mapAccumulator.updated(key, List(value))
-          }
-      }
-    }
-
     def computeCustomers
     : (Map[Int, Customer[Int, String]],
       Map[Int, Customer[Int, String]],
       Map[Int, Customer[Int, String]]) = {
-      val productsMap = productsRDD.collect()
-        .map { case (name, taxonomy) => (name, Product(name, taxonomy)) }.toMap
+      val taxonomy = productsRDD.collect().foldLeft(Taxonomy())((acc, i) => acc ++ Taxonomy(i._1, i._2))
+      val productsToSubClassesB = sc.broadcast(taxonomy.productsToSubClasses)
+      val productsB = sc.broadcast(taxonomy.products)
 
-      val classesMap: Map[String, List[String]] =
-        invertMap(productsMap
-          .map { case (_, taxonomy) => taxonomy.subCl -> taxonomy.cl }
-        )
+      val transformedBasketsRDD = basketsRDD
+        .map(b => b.map(bItem => productsToSubClassesB.value.getOrElse(productsB.value.getOrElse(bItem, -1), -1)))
 
-      val subClassesMap: Map[String, List[String]] =
-        invertMap(productsMap
-          .map { case (name, taxonomy) => name -> taxonomy.subCl }
-        )
-
-      val productsMapB = sc.broadcast(productsMap)
-
-      val assignedCustomersRDD = basketsRDD
-        .map(b => b.map(bItem => productsMapB.value.getOrElse(bItem, Product()).subCl))
-        .map(Customer(getRandomId, Spending[String]()) + Spending(_: _*))
+      val assignedCustomersRDD = transformedBasketsRDD
+        .map(b => Customer(getRandomId, Spending[Int]() ++ Spending(b: _*)))
         .map(customer => customer.id -> customer)
 
       val customersRDD = assignedCustomersRDD.reduceByKey(_ ++ _)
@@ -149,7 +130,17 @@ object ProjectMMD {
         c => Customer(c.id, c.spending * adjustedFractionalSpendingsTotal)
       )
 
-      (customers, fractionalCustomers, normalizedFractionalCustomers)
+      (
+        customers.mapValues(c => Customer(c.id, Spending(c.spending.vec.map {
+          case (k, v) => taxonomy.idsToSubClasses.getOrElse(k, "") -> v
+        }))),
+        fractionalCustomers.mapValues(c => Customer(c.id, Spending(c.spending.vec.map {
+          case (k, v) => taxonomy.idsToSubClasses.getOrElse(k, "") -> v
+        }))),
+        normalizedFractionalCustomers.mapValues(c => Customer(c.id, Spending(c.spending.vec.map {
+          case (k, v) => taxonomy.idsToSubClasses.getOrElse(k, "") -> v
+        })))
+      )
     }
 
     val (customers, fractionalCustomers, normalizedFractionalCustomers) =
@@ -169,3 +160,5 @@ object ProjectMMD {
     spark.stop()
   }
 }
+
+
