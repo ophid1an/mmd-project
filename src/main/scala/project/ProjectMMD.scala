@@ -202,13 +202,14 @@ object ProjectMMD {
     println("\n*** Normalized Fractional Customers sample ***\n")
     normalizedFractionalCustomers.take(sampleSize).foreach(println)
 
-    def displayRules(transactions: RDD[Array[String]],MinSupport:Double, NumPartitions:Int,MinConfidence:Double): Unit = {
+    def displayRules(transactions: RDD[Array[String]], minSupport: Double, numPartitions: Int, minConfidence: Double)
+    : Unit = {
 
       //println("First 5 transactions: " + transactions.map(_.length).take(5).mkString(", "))
       //println(s"Number of transactions: ${transactions.count()}")
       val fpg = new FPGrowth()
-        .setMinSupport(MinSupport)
-        .setNumPartitions(NumPartitions)
+        .setMinSupport(minSupport)
+        .setNumPartitions(numPartitions)
       val model = fpg.run(transactions)
 
       // println(s"Number of frequent itemsets: ${model.freqItemsets.count()}")
@@ -217,9 +218,9 @@ object ProjectMMD {
       // }
 
       println("AssociationRules")
-      model.generateAssociationRules(MinConfidence).collect().foreach { rule =>
+      model.generateAssociationRules(minConfidence).collect().foreach { rule =>
         println(s"${rule.antecedent.mkString("[", ",", "]")}=> " +
-          s"${rule.consequent .mkString("[", ",", "]")},${rule.confidence}")
+          s"${rule.consequent.mkString("[", ",", "]")},${rule.confidence}")
       }
 
     }
@@ -227,17 +228,17 @@ object ProjectMMD {
     val productsMap = productsRDD.collect().map(x => (x._1, Product(x._1, x._2))).toMap
     val productsMapB = sc.broadcast(productsMap)
 
-    val classRDD =basketsRDD.map(b =>b.map(bItem =>(productsMapB.value.getOrElse(bItem, Product()).cl)).distinct).cache()
-    val subclassRDD =basketsRDD.map(b => b.map(bItem =>(productsMapB.value.getOrElse(bItem, Product()).subCl)).distinct).cache()
-    val minSupport=0.04 //Fp growth minSupport
-    val NumPartitions=10 //Fp growth Num of partitions
-    val minConfidence=0.30 //Association Rules Confidence
+    val classRDD = basketsRDD.map(b => b.map(bItem => (productsMapB.value.getOrElse(bItem, Product()).cl)).distinct).cache()
+    val subclassRDD = basketsRDD.map(b => b.map(bItem => (productsMapB.value.getOrElse(bItem, Product()).subCl)).distinct).cache()
+    val minSupport = 0.04 //Fp growth minSupport
+    val NumPartitions = 10 //Fp growth Num of partitions
+    val minConfidence = 0.30 //Association Rules Confidence
 
     //This is wrong: 85(Fruits-Vegetables), 88(Bread-Bakery), 47(Dairy-Eggs-Cheese), 13(Canned-Goods-Soups)
     //This is wrong:54(Fruits-Vegetables), 4(Dairy-Eggs-Cheese), 34(Beverages)
     //Correct: 85(Fruits-Vegetables), 85(Bread-Bakery), 85(Dairy-Eggs-Cheese), 85(Canned-Goods-Soups)
     //Correct: 88(Fruits-Vegetables), 88(Dairy-Eggs-Cheese), 88(Beverages)
-    val testCust=classRDD.map(b=>b.map(x=>getRandomId.toString+"("+x+")")) //Need the same id to each line not different BUT HOW? ? ?
+    val testCust = classRDD.map(b => b.map(x => getRandomId.toString + "(" + x + ")")) //Need the same id to each line not different BUT HOW? ? ?
     println("\n***************************************\n")
     println("First 5 transactions classes: ")
     for (i <- testCust.take(5)) println("\t" + i.mkString(", "))
@@ -245,9 +246,9 @@ object ProjectMMD {
     println("First 5 transactions lenght: " + classRDD.map(_.length).take(5).mkString(", "))
 
     print("---------------------Rules for classes----------------------")
-    displayRules(classRDD,minSupport,NumPartitions,minConfidence)
+    displayRules(classRDD, minSupport, NumPartitions, minConfidence)
     print("---------------------Rules for subclasses----------------------")
-    displayRules(subclassRDD,minSupport,NumPartitions,minConfidence)
+    displayRules(subclassRDD, minSupport, NumPartitions, minConfidence)
 
     // Display statistics
     //    displayStats(basketsRDD, productsRDD)
