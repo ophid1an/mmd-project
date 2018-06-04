@@ -24,11 +24,15 @@ object ProjectMMD {
     // Suppress info messages
     sc.setLogLevel("ERROR")
 
-    val testing = true
+    val testing = false
 
+    val numPartitions = spark.sparkContext.defaultParallelism
     val seed = 1
     val rand = new scala.util.Random(seed)
     val sampleSize = 5
+    val maxAbsDeviation = 0.0000001
+    val minSupport = 0.04 // FP-growth minSupport
+    val minConfidence = 0.30 // Association Rules minConfidence
 
     val (groceriesFilename, productsFilename, customersMaxCard) =
       if (testing) ("groceries-testing.csv", "products-categorized-testing.csv", 3)
@@ -114,18 +118,24 @@ object ProjectMMD {
 
       val customers = customersRDD.collect().toMap
 
+      // Assertions:
+
+      // TODO: Is the ... equal to ...
       assert(basketsRDD.map(_.length).sum ==
         customers.values.foldLeft(0.0)(_ + _.clSpending.vec.values.sum)
       )
 
+      // TODO: Is the ... equal to ...
       assert(basketsRDD.map(_.length).sum ==
         customers.values.foldLeft(0.0)(_ + _.subClSpending.vec.values.sum)
       )
 
+      // TODO: Is the ... equal to ...
       assert(basketsRDD.map(_.length).sum ==
         customers.values.foldLeft(0.0)(_ + _.clSpending.cnt)
       )
 
+      // TODO: Is the ... equal to ...
       assert(basketsRDD.map(_.length).sum ==
         customers.values.foldLeft(0.0)(_ + _.subClSpending.cnt)
       )
@@ -138,12 +148,16 @@ object ProjectMMD {
       println("Folded clSpending: " + fractionalCustomers.values.foldLeft(0.0)(_ + _.clSpending.vec.values.sum))
       println("Folded subClSpending: " + fractionalCustomers.values.foldLeft(0.0)(_ + _.subClSpending.vec.values.sum))
 
+      // Assertions:
+
+      // TODO: Is the ... roughly equal to ...
       assert(Math.abs(customersCard -
-        fractionalCustomers.values.foldLeft(0.0)(_ + _.clSpending.vec.values.sum)) < 0.00001
+        fractionalCustomers.values.foldLeft(0.0)(_ + _.clSpending.vec.values.sum)) < maxAbsDeviation
       )
 
+      // TODO: Is the ... roughly equal to ...
       assert(Math.abs(customersCard -
-        fractionalCustomers.values.foldLeft(0.0)(_ + _.subClSpending.vec.values.sum)) < 0.00001
+        fractionalCustomers.values.foldLeft(0.0)(_ + _.subClSpending.vec.values.sum)) < maxAbsDeviation
       )
 
 
@@ -230,25 +244,23 @@ object ProjectMMD {
 
     val classRDD = basketsRDD.map(b => b.map(bItem => (productsMapB.value.getOrElse(bItem, Product()).cl)).distinct).cache()
     val subclassRDD = basketsRDD.map(b => b.map(bItem => (productsMapB.value.getOrElse(bItem, Product()).subCl)).distinct).cache()
-    val minSupport = 0.04 //Fp growth minSupport
-    val NumPartitions = 10 //Fp growth Num of partitions
-    val minConfidence = 0.30 //Association Rules Confidence
+
 
     //This is wrong: 85(Fruits-Vegetables), 88(Bread-Bakery), 47(Dairy-Eggs-Cheese), 13(Canned-Goods-Soups)
     //This is wrong:54(Fruits-Vegetables), 4(Dairy-Eggs-Cheese), 34(Beverages)
     //Correct: 85(Fruits-Vegetables), 85(Bread-Bakery), 85(Dairy-Eggs-Cheese), 85(Canned-Goods-Soups)
     //Correct: 88(Fruits-Vegetables), 88(Dairy-Eggs-Cheese), 88(Beverages)
     val testCust = classRDD.map(b => b.map(x => getRandomId.toString + "(" + x + ")")) //Need the same id to each line not different BUT HOW? ? ?
-    println("\n***************************************\n")
-    println("First 5 transactions classes: ")
-    for (i <- testCust.take(5)) println("\t" + i.mkString(", "))
+    println("\n****************************************************************\n")
+    println("Transactions sample classes: ")
+    for (i <- testCust.take(sampleSize)) println("\t" + i.mkString(", "))
 
-    println("First 5 transactions lenght: " + classRDD.map(_.length).take(5).mkString(", "))
+    println("Transactions sample size: " + classRDD.map(_.length).take(sampleSize).mkString(", "))
 
-    print("---------------------Rules for classes----------------------")
-    displayRules(classRDD, minSupport, NumPartitions, minConfidence)
-    print("---------------------Rules for subclasses----------------------")
-    displayRules(subclassRDD, minSupport, NumPartitions, minConfidence)
+    println("\n--------------------- Rules for classes ----------------------\n")
+    displayRules(classRDD, minSupport, numPartitions, minConfidence)
+    println("\n--------------------- Rules for subclasses -------------------\n")
+    displayRules(subclassRDD, minSupport, numPartitions, minConfidence)
 
     // Display statistics
     //    displayStats(basketsRDD, productsRDD)
