@@ -19,18 +19,17 @@ object ProjectMMD {
       .master("local[*]")
       .getOrCreate()
 
-    val sc = spark.sparkContext // Spark context
+    // Spark context
+    val sc = spark.sparkContext
 
     // Suppress info messages
     sc.setLogLevel("ERROR")
 
     val testing = false
 
-    val numPartitions = spark.sparkContext.defaultParallelism
-    val seed = 1
-    val rand = new scala.util.Random(seed)
-    val sampleSize = 5
-    val maxAbsDeviation = 0.0000001
+    val seed = 1 // Seed for RNG
+    val sampleSize = 5 // Size for samples
+    val numPartitions = spark.sparkContext.defaultParallelism // Partitions number for FP-growth
     val minSupport = 0.04 // FP-growth minSupport
     val minConfidence = 0.30 // Association Rules minConfidence
 
@@ -38,11 +37,12 @@ object ProjectMMD {
       if (testing) ("groceries-testing.csv", "products-categorized-testing.csv", 3)
       else ("groceries.csv", "products-categorized.csv", 100)
 
-    def getRandomId: Int = rand.nextInt(customersMaxCard)
+    val maxAbsDeviation = 0.0000001 // Used for assertions
 
-    // Set number of partitions for RDDs equal to cores number
-    //    val numPartitions = spark.sparkContext.defaultParallelism
-    //    val numPartitions = 2
+    val rand = new scala.util.Random(seed)
+
+    // Method to assign random IDs to customers
+    def getRandomId: Int = rand.nextInt(customersMaxCard)
 
     val basketsRDD = sc
       .textFile(groceriesFilename)
@@ -64,6 +64,7 @@ object ProjectMMD {
       )
       .cache()
 
+    // Method to display some statistic about transactions and products
     def displayStats(baskets: RDD[Array[String]], products: RDD[(String, Array[String])]): Unit = {
       val basketsCnt = baskets.count()
       val basketsSizes = baskets.map(_.length)
@@ -105,6 +106,9 @@ object ProjectMMD {
       val transformedBasketsRDD = basketsRDD
         .map(b => b.map(bItem => productsToSubClassesB.value.getOrElse(productsB.value.getOrElse(bItem, -1), -1)))
 
+      // Assign each transaction to a random customer ID
+      // TODO: RDD Structure
+      // NOTE: Customers cardinality may be less than customersMaxCard
       val assignedCustomersRDD = transformedBasketsRDD
         .map(b => {
           val clArr = b.map(subClassesToClassesB.value.getOrElse(_, -1))
