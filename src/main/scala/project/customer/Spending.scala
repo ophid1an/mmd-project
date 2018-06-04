@@ -1,5 +1,7 @@
 package project.customer
 
+import project.product.Taxonomy
+
 case class Spending[A](vec: Map[A, Double]) {
   def cnt: Double = vec.values.sum
 
@@ -10,6 +12,22 @@ case class Spending[A](vec: Map[A, Double]) {
     this.copy(multiplyMaps(vec, other))
 
   def fractional: Spending[A] = this.copy(vec.mapValues(_ / cnt))
+
+  def toClString(taxonomy: Taxonomy): Spending[String] =
+    this.copy(vec.map {
+      case (k, v) => k match {
+        case i: Int => taxonomy.idsToClasses.getOrElse(i, "") -> v
+        case _ => k.toString -> v
+      }
+    })
+
+  def toSubClString(taxonomy: Taxonomy): Spending[String] =
+    this.copy(vec.map {
+      case (k, v) => k match {
+        case i: Int => taxonomy.idsToSubClasses.getOrElse(i, "") -> v
+        case _ => k.toString -> v
+      }
+    })
 
   private def multiplyMaps[A](map1: Map[A, Double], map2: Map[A, Double]): Map[A, Double] =
     map1.foldLeft(map1)((acc, i) => acc.updated(i._1, i._2 * map2.getOrElse(i._1, 1.0)))

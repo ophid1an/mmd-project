@@ -25,7 +25,7 @@ object ProjectMMD {
     // Suppress info messages
     sc.setLogLevel("ERROR")
 
-    val testing = false
+    val testing = true
 
     val seed = 1 // Seed for RNG
     val sampleSize = 5 // Size for samples
@@ -183,29 +183,9 @@ object ProjectMMD {
           c.subClSpending * adjustedFractionalSubClSpendingsTotal)
       )
 
-      //      (customers, fractionalCustomers, fractionalCustomers)
-      (
-        customers.mapValues(c => Customer(c.id,
-          Spending(c.clSpending.vec.map {
-            case (k, v) => taxonomy.idsToClasses.getOrElse(k, "") -> v
-          }),
-          Spending(c.subClSpending.vec.map {
-            case (k, v) => taxonomy.idsToSubClasses.getOrElse(k, "") -> v
-          }))),
-        fractionalCustomers.mapValues(c => Customer(c.id,
-          Spending(c.clSpending.vec.map {
-            case (k, v) => taxonomy.idsToClasses.getOrElse(k, "") -> v
-          }),
-          Spending(c.subClSpending.vec.map {
-            case (k, v) => taxonomy.idsToSubClasses.getOrElse(k, "") -> v
-          }))),
-        normalizedFractionalCustomers.mapValues(c => Customer(c.id,
-          Spending(c.clSpending.vec.map {
-            case (k, v) => taxonomy.idsToClasses.getOrElse(k, "") -> v
-          }),
-          Spending(c.subClSpending.vec.map {
-            case (k, v) => taxonomy.idsToSubClasses.getOrElse(k, "") -> v
-          })))
+      (customers.mapValues(_.idsToStrings(taxonomy)),
+        fractionalCustomers.mapValues(_.idsToStrings(taxonomy)),
+        normalizedFractionalCustomers.mapValues(_.idsToStrings(taxonomy))
       )
     }
 
