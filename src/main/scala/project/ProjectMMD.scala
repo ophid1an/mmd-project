@@ -44,12 +44,54 @@ object ProjectMMD {
     // Method to assign random IDs to customers
     def getRandomId: Int = rand.nextInt(customersMaxCard)
 
+    // Method to mine association rules
+    def mineRules(transactions: RDD[Array[Int]], minSupport: Double,
+                  numPartitions: Int, minConfidence: Double)
+    : Array[AssociationRules.Rule[Int]] = {
+
+      val model = new FPGrowth()
+        .setMinSupport(minSupport)
+        .setNumPartitions(numPartitions)
+        .run(transactions)
+
+      model.generateAssociationRules(minConfidence).collect()
+    }
+
+    // Method to display some statistics about transactions and products
+    def displayStats(baskets: RDD[Array[String]], products: RDD[(String, Array[String])]): Unit = {
+      val basketsCnt = baskets.count()
+      val basketsSizes = baskets.map(_.length)
+      val productsCnt = products.count()
+
+      println("\n**********")
+      println("Statistics")
+      println("**********")
+
+      println("\nBaskets")
+      println("------------------------------")
+      println("Count: " + basketsCnt)
+
+      println("Baskets sample: ")
+      for (i <- baskets.take(sampleSize)) println("\t" + i.mkString(", "))
+
+      println("Baskets sample sizes: " + basketsSizes.take(sampleSize).mkString(", "))
+      println("Min size: " + basketsSizes.min())
+      println("Max size: " + basketsSizes.max())
+      println("Mean size: " + basketsSizes.mean())
+
+      println("\nProducts")
+      println("------------------------------")
+      println("Count: " + productsCnt)
+
+      println("Products sample: ")
+      for (i <- products.take(sampleSize)) println("\t" + i._1 + " -> " + i._2.mkString(", "))
+    }
+
     val basketsRDD = sc
       .textFile(groceriesFilename)
       .map(_.trim.split(',')
         .map(_.trim)
       )
-      .cache()
 
     val productsRDD = sc
       .textFile(productsFilename)
@@ -63,7 +105,8 @@ object ProjectMMD {
         )
       )
 
-    val taxonomy = productsRDD.collect().foldLeft(Taxonomy())((acc, i) => acc ++ Taxonomy(i._1, i._2))
+    val taxonomy = productsRDD.collect()
+      .foldLeft(Taxonomy())((acc, i) => acc ++ Taxonomy(i._1, i._2))
 
     // Broadcast variables
     val productsB = sc.broadcast(taxonomy.products)
@@ -72,6 +115,7 @@ object ProjectMMD {
 
     val transformedBasketsRDD = basketsRDD
       .map(b => b.map(bItem => productsToSubClassesB.value.getOrElse(productsB.value.getOrElse(bItem, -1), -1)))
+      .cache()
 
     // Assign each transaction to a random customer ID
     // TODO: RDD Structure
@@ -163,83 +207,39 @@ object ProjectMMD {
       .mapValues(_.idsToStrings(taxonomy))
       .take(sampleSize).foreach(println)
 
-    def displayRules(transactions: RDD[Array[String]], minSupport: Double, numPartitions: Int, minConfidence: Double)
-    : Unit = {
+    // Distinct RDDs
+    val subClassesRDD = transformedBasketsRDD
+      .map(_.distinct)
+      .cache()
 
-      //println("First 5 transactions: " + transactions.map(_.length).take(5).mkString(", "))
-      //println(s"Number of transactions: ${transactions.count()}")
-      val fpg = new FPGrowth()
-        .setMinSupport(minSupport)
-        .setNumPartitions(numPartitions)
-      val model = fpg.run(transactions)
+    val classesRDD = subClassesRDD
+      .map(b => b.map(subCl => subClassesToClassesB.value.getOrElse(subCl, -1)).distinct)
 
-      // println(s"Number of frequent itemsets: ${model.freqItemsets.count()}")
-      // model.freqItemsets.collect().foreach { itemset =>
-      // println(s"${itemset.items.mkString("[", ",", "]")},${itemset.freq}")
-      // }
+    val classesRules = mineRules(classesRDD, minSupport, numPartitions, minConfidence)
+    val subClassesRules = mineRules(subClassesRDD, minSupport, numPartitions, minConfidence)
 
-      println("AssociationRules")
-      model.generateAssociationRules(minConfidence).collect().foreach { rule =>
-        println(s"${rule.antecedent.mkString("[", ",", "]")}=> " +
-          s"${rule.consequent.mkString("[", ",", "]")},${rule.confidence}")
-      }
-
-    }
-
-    val productsMap = productsRDD.collect().map(x => (x._1, Product(x._1, x._2))).toMap
-    val productsMapB = sc.broadcast(productsMap)
-
-    val classRDD = basketsRDD.map(b => b.map(bItem => (productsMapB.value.getOrElse(bItem, Product()).cl)).distinct).cache()
-    val subclassRDD = basketsRDD.map(b => b.map(bItem => (productsMapB.value.getOrElse(bItem, Product()).subCl)).distinct).cache()
-
-    //This is wrong: 85(Fruits-Vegetables), 88(Bread-Bakery), 47(Dairy-Eggs-Cheese), 13(Canned-Goods-Soups)
-    //This is wrong:54(Fruits-Vegetables), 4(Dairy-Eggs-Cheese), 34(Beverages)
-    //Correct: 85(Fruits-Vegetables), 85(Bread-Bakery), 85(Dairy-Eggs-Cheese), 85(Canned-Goods-Soups)
-    //Correct: 88(Fruits-Vegetables), 88(Dairy-Eggs-Cheese), 88(Beverages)
-    val testCust = classRDD.map(b => b.map(x => getRandomId.toString + "(" + x + ")")) //Need the same id to each line not different BUT HOW? ? ?
     println("\n****************************************************************\n")
-    println("Transactions sample classes: ")
-    for (i <- testCust.take(sampleSize)) println("\t" + i.mkString(", "))
-
-    println("Transactions sample size: " + classRDD.map(_.length).take(sampleSize).mkString(", "))
+    println("Transactions classes sample: ")
+    val sample = classesRDD.map(b => b.map(cl => taxonomy.idsToClasses.getOrElse(cl, "NADA")))
+      .take(sampleSize)
+    sample.foreach(e => println(e.mkString(", ")))
+    println("Transactions classes sample size: " + sample.map(_.length).mkString(", "))
 
     println("\n--------------------- Rules for classes ----------------------\n")
-    displayRules(classRDD, minSupport, numPartitions, minConfidence)
+
+    classesRules.foreach { rule =>
+      println(s"${rule.antecedent.mkString("[", ",", "]")}=> " +
+        s"${rule.consequent.mkString("[", ",", "]")},${rule.confidence}")
+    }
     println("\n--------------------- Rules for subclasses -------------------\n")
-    displayRules(subclassRDD, minSupport, numPartitions, minConfidence)
 
-    // Method to display some statistics about transactions and products
-    def displayStats(baskets: RDD[Array[String]], products: RDD[(String, Array[String])]): Unit = {
-      val basketsCnt = baskets.count()
-      val basketsSizes = baskets.map(_.length)
-      val productsCnt = products.count()
-
-      println("\n**********")
-      println("Statistics")
-      println("**********")
-
-      println("\nBaskets")
-      println("------------------------------")
-      println("Count: " + basketsCnt)
-
-      println("Baskets sample: ")
-      for (i <- baskets.take(sampleSize)) println("\t" + i.mkString(", "))
-
-      println("Baskets sample sizes: " + basketsSizes.take(sampleSize).mkString(", "))
-      println("Min size: " + basketsSizes.min())
-      println("Max size: " + basketsSizes.max())
-      println("Mean size: " + basketsSizes.mean())
-
-      println("\nProducts")
-      println("------------------------------")
-      println("Count: " + productsCnt)
-
-      println("Products sample: ")
-      for (i <- products.take(sampleSize)) println("\t" + i._1 + " -> " + i._2.mkString(", "))
+    subClassesRules.foreach { rule =>
+      println(s"${rule.antecedent.mkString("[", ",", "]")}=> " +
+        s"${rule.consequent.mkString("[", ",", "]")},${rule.confidence}")
     }
 
-    // Display statistics
-    //    displayStats(basketsRDD, productsRDD)
+    //Display statistics
+//    displayStats(basketsRDD, productsRDD)
 
     spark.stop()
   }
