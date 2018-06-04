@@ -1,11 +1,7 @@
-package project.customer
+package project
 
-import project.product.Taxonomy
-
-case class Customer[A, B](id: A, clSpending: Spending[B], subClSpending: Spending[B]) {
-  //  def +(spending: Spending[B]): Customer[A, B] =
-  //    this.copy(spending = this.spending ++ spending)
-
+case class Customer[A, B](id: A, clSpending: Spending[B],
+                          subClSpending: Spending[B]) {
   def ++(other: Customer[A, B]): Customer[A, B] =
     if (id == other.id)
       this.copy(clSpending = clSpending ++ other.clSpending,

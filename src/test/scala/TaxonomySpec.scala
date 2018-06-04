@@ -1,5 +1,5 @@
 import org.scalatest.FunSuite
-import project.product.Taxonomy
+import project.Taxonomy
 
 class TaxonomySpec extends FunSuite {
 

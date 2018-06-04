@@ -1,4 +1,4 @@
-package project.product
+package project
 
 case class Taxonomy(products: Map[String, Int] = Map(), classes: Map[String, Int] = Map(),
                     subClasses: Map[String, Int] = Map(),

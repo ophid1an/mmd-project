@@ -1,4 +1,4 @@
-package project.product
+package project
 
 case class Product(name: String = "", cl: String = "", subCl: String = "",
                    vec: Map[String, Double] = Map()) {

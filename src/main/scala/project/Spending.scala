@@ -1,6 +1,4 @@
-package project.customer
-
-import project.product.Taxonomy
+package project
 
 case class Spending[A](vec: Map[A, Double]) {
   def cnt: Double = vec.values.sum

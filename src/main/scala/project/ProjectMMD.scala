@@ -1,13 +1,8 @@
 package project
 
+import org.apache.spark.mllib.fpm.{AssociationRules, FPGrowth}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.mllib.fpm.FPGrowth
-import org.apache.spark.mllib.fpm.AssociationRules
-import collection.breakOut
-import project.customer.{Customer, Spending}
-import project.product.{Product, Taxonomy}
-
 
 object ProjectMMD {
 
@@ -239,7 +234,7 @@ object ProjectMMD {
     }
 
     //Display statistics
-//    displayStats(basketsRDD, productsRDD)
+    //    displayStats(basketsRDD, productsRDD)
 
     spark.stop()
   }
