@@ -25,7 +25,7 @@ object ProjectMMD {
     // Suppress info messages
     sc.setLogLevel("ERROR")
 
-    val testing = true
+    val testing = false
 
     val seed = 1 // Seed for RNG
     val sampleSize = 5 // Size for samples
@@ -62,143 +62,106 @@ object ProjectMMD {
             .map(_.trim)
         )
       )
-      .cache()
 
-    // Method to display some statistic about transactions and products
-    def displayStats(baskets: RDD[Array[String]], products: RDD[(String, Array[String])]): Unit = {
-      val basketsCnt = baskets.count()
-      val basketsSizes = baskets.map(_.length)
-      val productsCnt = products.count()
+    val taxonomy = productsRDD.collect().foldLeft(Taxonomy())((acc, i) => acc ++ Taxonomy(i._1, i._2))
 
-      println("**********")
-      println("Statistics")
-      println("**********")
+    // Broadcast variables
+    val productsB = sc.broadcast(taxonomy.products)
+    val productsToSubClassesB = sc.broadcast(taxonomy.productsToSubClasses)
+    val subClassesToClassesB = sc.broadcast(taxonomy.subClassesToClasses)
 
-      println("\nBaskets")
-      println("------------------------------")
-      println("Count: " + basketsCnt)
+    val transformedBasketsRDD = basketsRDD
+      .map(b => b.map(bItem => productsToSubClassesB.value.getOrElse(productsB.value.getOrElse(bItem, -1), -1)))
 
-      println("Baskets sample: ")
-      for (i <- baskets.take(sampleSize)) println("\t" + i.mkString(", "))
+    // Assign each transaction to a random customer ID
+    // TODO: RDD Structure
+    // NOTE: Customers cardinality may be less than customersMaxCard
+    val assignedBasketsRDD = transformedBasketsRDD
+      .map(b => {
+        val clArr = b.map(subClassesToClassesB.value.getOrElse(_, -1))
+        Customer(getRandomId,
+          Spending[Int]() ++ Spending(clArr: _*),
+          Spending[Int]() ++ Spending(b: _*))
+      })
+      .map(customer => customer.id -> customer)
 
-      println("Baskets sample sizes: " + basketsSizes.take(sampleSize).mkString(", "))
-      println("Min size: " + basketsSizes.min())
-      println("Max size: " + basketsSizes.max())
-      println("Mean size: " + basketsSizes.mean())
+    val customersRDD = assignedBasketsRDD.reduceByKey(_ ++ _)
 
-      println("\nProducts")
-      println("------------------------------")
-      println("Count: " + productsCnt)
+    val customers = customersRDD.collect().toMap
 
-      println("Products sample: ")
-      for (i <- products.take(sampleSize)) println("\t" + i._1 + " -> " + i._2.mkString(", "))
-    }
+    // Assertions:
 
-    def computeCustomers
-    : (Map[Int, Customer[Int, String]],
-      Map[Int, Customer[Int, String]],
-      Map[Int, Customer[Int, String]]) = {
-      val taxonomy = productsRDD.collect().foldLeft(Taxonomy())((acc, i) => acc ++ Taxonomy(i._1, i._2))
-      val productsToSubClassesB = sc.broadcast(taxonomy.productsToSubClasses)
-      val productsB = sc.broadcast(taxonomy.products)
-      val subClassesToClassesB = sc.broadcast(taxonomy.subClassesToClasses)
+    // TODO: Is the ... equal to ...
+    assert(basketsRDD.map(_.length).sum ==
+      customers.values.foldLeft(0.0)(_ + _.clSpending.vec.values.sum)
+    )
 
-      val transformedBasketsRDD = basketsRDD
-        .map(b => b.map(bItem => productsToSubClassesB.value.getOrElse(productsB.value.getOrElse(bItem, -1), -1)))
+    // TODO: Is the ... equal to ...
+    assert(basketsRDD.map(_.length).sum ==
+      customers.values.foldLeft(0.0)(_ + _.subClSpending.vec.values.sum)
+    )
 
-      // Assign each transaction to a random customer ID
-      // TODO: RDD Structure
-      // NOTE: Customers cardinality may be less than customersMaxCard
-      val assignedCustomersRDD = transformedBasketsRDD
-        .map(b => {
-          val clArr = b.map(subClassesToClassesB.value.getOrElse(_, -1))
-          Customer(getRandomId,
-            Spending[Int]() ++ Spending(clArr: _*),
-            Spending[Int]() ++ Spending(b: _*))
-        })
-        .map(customer => customer.id -> customer)
+    // TODO: Is the ... equal to ...
+    assert(basketsRDD.map(_.length).sum ==
+      customers.values.foldLeft(0.0)(_ + _.clSpending.cnt)
+    )
 
-      val customersRDD = assignedCustomersRDD.reduceByKey(_ ++ _)
+    // TODO: Is the ... equal to ...
+    assert(basketsRDD.map(_.length).sum ==
+      customers.values.foldLeft(0.0)(_ + _.subClSpending.cnt)
+    )
 
-      val customers = customersRDD.collect().toMap
+    val fractionalCustomers = customers.mapValues(_.fractional)
 
-      // Assertions:
+    val customersCard = customers.size
 
-      // TODO: Is the ... equal to ...
-      assert(basketsRDD.map(_.length).sum ==
-        customers.values.foldLeft(0.0)(_ + _.clSpending.vec.values.sum)
-      )
+    println("Customers card: " + customersCard)
+    println("Folded clSpending: " + fractionalCustomers.values.foldLeft(0.0)(_ + _.clSpending.vec.values.sum))
+    println("Folded subClSpending: " + fractionalCustomers.values.foldLeft(0.0)(_ + _.subClSpending.vec.values.sum))
 
-      // TODO: Is the ... equal to ...
-      assert(basketsRDD.map(_.length).sum ==
-        customers.values.foldLeft(0.0)(_ + _.subClSpending.vec.values.sum)
-      )
+    // Assertions:
 
-      // TODO: Is the ... equal to ...
-      assert(basketsRDD.map(_.length).sum ==
-        customers.values.foldLeft(0.0)(_ + _.clSpending.cnt)
-      )
+    // TODO: Is the ... roughly equal to ...
+    assert(Math.abs(customersCard -
+      fractionalCustomers.values.foldLeft(0.0)(_ + _.clSpending.vec.values.sum)) < maxAbsDeviation
+    )
 
-      // TODO: Is the ... equal to ...
-      assert(basketsRDD.map(_.length).sum ==
-        customers.values.foldLeft(0.0)(_ + _.subClSpending.cnt)
-      )
+    // TODO: Is the ... roughly equal to ...
+    assert(Math.abs(customersCard -
+      fractionalCustomers.values.foldLeft(0.0)(_ + _.subClSpending.vec.values.sum)) < maxAbsDeviation
+    )
 
-      val fractionalCustomers = customers.mapValues(_.fractional)
+    val fractionalClSpendingsTotal = fractionalCustomers.values
+      .map(_.clSpending).reduce(_ ++ _)
 
-      val customersCard = customers.size
+    val fractionalSubClSpendingsTotal = fractionalCustomers.values
+      .map(_.subClSpending).reduce(_ ++ _)
 
-      println("Customers card: " + customersCard)
-      println("Folded clSpending: " + fractionalCustomers.values.foldLeft(0.0)(_ + _.clSpending.vec.values.sum))
-      println("Folded subClSpending: " + fractionalCustomers.values.foldLeft(0.0)(_ + _.subClSpending.vec.values.sum))
+    val adjustedFractionalClSpendingsTotal = fractionalClSpendingsTotal.vec
+      .mapValues(customersCard / _)
 
-      // Assertions:
+    val adjustedFractionalSubClSpendingsTotal = fractionalSubClSpendingsTotal.vec
+      .mapValues(customersCard / _)
 
-      // TODO: Is the ... roughly equal to ...
-      assert(Math.abs(customersCard -
-        fractionalCustomers.values.foldLeft(0.0)(_ + _.clSpending.vec.values.sum)) < maxAbsDeviation
-      )
-
-      // TODO: Is the ... roughly equal to ...
-      assert(Math.abs(customersCard -
-        fractionalCustomers.values.foldLeft(0.0)(_ + _.subClSpending.vec.values.sum)) < maxAbsDeviation
-      )
-
-
-      val fractionalClSpendingsTotal = fractionalCustomers.values
-        .map(_.clSpending).reduce(_ ++ _)
-
-      val fractionalSubClSpendingsTotal = fractionalCustomers.values
-        .map(_.subClSpending).reduce(_ ++ _)
-
-      val adjustedFractionalClSpendingsTotal = fractionalClSpendingsTotal.vec
-        .mapValues(customersCard / _)
-
-      val adjustedFractionalSubClSpendingsTotal = fractionalSubClSpendingsTotal.vec
-        .mapValues(customersCard / _)
-
-      val normalizedFractionalCustomers = fractionalCustomers.mapValues(
-        c => Customer(c.id,
-          c.clSpending * adjustedFractionalClSpendingsTotal,
-          c.subClSpending * adjustedFractionalSubClSpendingsTotal)
-      )
-
-      (customers.mapValues(_.idsToStrings(taxonomy)),
-        fractionalCustomers.mapValues(_.idsToStrings(taxonomy)),
-        normalizedFractionalCustomers.mapValues(_.idsToStrings(taxonomy))
-      )
-    }
-
-    val (customers, fractionalCustomers, normalizedFractionalCustomers) =
-      computeCustomers
+    val normalizedFractionalCustomers = fractionalCustomers.mapValues(
+      c => Customer(c.id,
+        c.clSpending * adjustedFractionalClSpendingsTotal,
+        c.subClSpending * adjustedFractionalSubClSpendingsTotal)
+    )
 
     // Print customers sample
     println("\n************ Customers sample ****************\n")
-    customers.take(sampleSize).foreach(println)
+    customers
+      .mapValues(_.idsToStrings(taxonomy))
+      .take(sampleSize).foreach(println)
     println("\n******** Fractional Customers sample *********\n")
-    fractionalCustomers.take(sampleSize).foreach(println)
+    fractionalCustomers
+      .mapValues(_.idsToStrings(taxonomy))
+      .take(sampleSize).foreach(println)
     println("\n*** Normalized Fractional Customers sample ***\n")
-    normalizedFractionalCustomers.take(sampleSize).foreach(println)
+    normalizedFractionalCustomers
+      .mapValues(_.idsToStrings(taxonomy))
+      .take(sampleSize).foreach(println)
 
     def displayRules(transactions: RDD[Array[String]], minSupport: Double, numPartitions: Int, minConfidence: Double)
     : Unit = {
@@ -229,7 +192,6 @@ object ProjectMMD {
     val classRDD = basketsRDD.map(b => b.map(bItem => (productsMapB.value.getOrElse(bItem, Product()).cl)).distinct).cache()
     val subclassRDD = basketsRDD.map(b => b.map(bItem => (productsMapB.value.getOrElse(bItem, Product()).subCl)).distinct).cache()
 
-
     //This is wrong: 85(Fruits-Vegetables), 88(Bread-Bakery), 47(Dairy-Eggs-Cheese), 13(Canned-Goods-Soups)
     //This is wrong:54(Fruits-Vegetables), 4(Dairy-Eggs-Cheese), 34(Beverages)
     //Correct: 85(Fruits-Vegetables), 85(Bread-Bakery), 85(Dairy-Eggs-Cheese), 85(Canned-Goods-Soups)
@@ -245,6 +207,36 @@ object ProjectMMD {
     displayRules(classRDD, minSupport, numPartitions, minConfidence)
     println("\n--------------------- Rules for subclasses -------------------\n")
     displayRules(subclassRDD, minSupport, numPartitions, minConfidence)
+
+    // Method to display some statistics about transactions and products
+    def displayStats(baskets: RDD[Array[String]], products: RDD[(String, Array[String])]): Unit = {
+      val basketsCnt = baskets.count()
+      val basketsSizes = baskets.map(_.length)
+      val productsCnt = products.count()
+
+      println("\n**********")
+      println("Statistics")
+      println("**********")
+
+      println("\nBaskets")
+      println("------------------------------")
+      println("Count: " + basketsCnt)
+
+      println("Baskets sample: ")
+      for (i <- baskets.take(sampleSize)) println("\t" + i.mkString(", "))
+
+      println("Baskets sample sizes: " + basketsSizes.take(sampleSize).mkString(", "))
+      println("Min size: " + basketsSizes.min())
+      println("Max size: " + basketsSizes.max())
+      println("Mean size: " + basketsSizes.mean())
+
+      println("\nProducts")
+      println("------------------------------")
+      println("Count: " + productsCnt)
+
+      println("Products sample: ")
+      for (i <- products.take(sampleSize)) println("\t" + i._1 + " -> " + i._2.mkString(", "))
+    }
 
     // Display statistics
     //    displayStats(basketsRDD, productsRDD)
