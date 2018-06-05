@@ -155,6 +155,7 @@ object ProjectMMD {
     val productsB = sc.broadcast(taxonomy.products)
     val productsToSubClassesB = sc.broadcast(taxonomy.productsToSubClasses)
     val subClassesToClassesB = sc.broadcast(taxonomy.subClassesToClasses)
+    val classesToSubClassesB = sc.broadcast(taxonomy.classesToSubClasses)
 
     val transformedBasketsRDD = basketsRDD
       .map(b => b.map(bItem => productsToSubClassesB.value.getOrElse(productsB.value.getOrElse(bItem, -1), -1)))
@@ -255,16 +256,38 @@ object ProjectMMD {
       * ** Association Rules Mining ***
       * *******************************/
 
-    // Distinct RDDs
+    // RDD with distinct subclasses ids for each transaction
     val subClassesRDD = transformedBasketsRDD
       .map(_.distinct)
       .cache()
 
+    // RDD with distinct classes ids for each transaction
     val classesRDD = subClassesRDD
       .map(b => b.map(subCl => subClassesToClassesB.value.getOrElse(subCl, -1)).distinct)
+      .cache()
 
+    // Mine rules for classes and subclasses and get rules with antecedent length of 1
     val classesRules = mineRules(classesRDD, params.minSupport, numPartitions, params.minConfidence)
+      .filter(_.antecedent.length == 1)
     val subClassesRules = mineRules(subClassesRDD, params.minSupport, numPartitions, params.minConfidence)
+      .filter(_.antecedent.length == 1)
+
+    // Content-based products RDD
+    val transformedProductsRDD = productsRDD.map {
+      case (k, v) => {
+        val prodId = productsB.value.getOrElse(k, -1)
+        val prodSubClass = productsToSubClassesB.value.getOrElse(prodId, -1)
+        val prodClass = subClassesToClassesB.value.getOrElse(prodSubClass, -1)
+        val prodSiblingSubClasses = classesToSubClassesB.value.getOrElse(prodClass, List[Int]())
+        (prodId,
+          (Product(Map[Int, Double]())
+            + prodSiblingSubClasses.map(x => x -> 0.5).toMap) // subclass with same class
+            .setOwnSubClass(prodSubClass) // within same subclass
+        )
+      }
+    }
+
+    println(s"transformedProductsRDD size: ${transformedProductsRDD.count()}")
 
     println("\n****************************************************************\n")
     println("Transactions classes sample: ")
@@ -297,7 +320,7 @@ object ProjectMMD {
     println("\n\n****** Clustering using customers' normalized fractional class spendings ******\n\n")
 
     Range(2, 21).foreach(clusterSize => {
-      val clusters = findClusters(parsedData, params.clustersNum)
+      val clusters = findClusters(parsedData, clusterSize)
       // Evaluate clustering by computing Within Set Sum of Squared Errors
       println(s"Cluster size: $clusterSize")
       println(s"Within Set Sum of Squared Errors = ${clusters.computeCost(parsedData)}\n")
@@ -309,6 +332,7 @@ object ProjectMMD {
 
     spark.stop()
   }
+
 }
 
 
