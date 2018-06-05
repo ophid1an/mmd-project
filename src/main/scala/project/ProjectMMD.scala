@@ -3,10 +3,55 @@ package project
 import org.apache.spark.mllib.fpm.{AssociationRules, FPGrowth}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.SparkSession
+import scopt.OptionParser
 
 object ProjectMMD {
 
-  def main(args: Array[String]): Unit = {
+  case class Params(
+                     // Seed for the RNG
+                     seed: Int = 1,
+                     // Customers maximum cardinality
+                     customersMaxCard: Int = 100,
+                     // FP-growth minSupport
+                     minSupport: Double = 0.04,
+                     // Association Rules minConfidence
+                     minConfidence: Double = 0.30,
+                     basketsPath: String = "groceries.csv",
+                     productsPath: String = "products-categorized.csv"
+                   )
+
+  def main(args: Array[String]) {
+    val defaultParams = Params()
+
+    val parser = new OptionParser[Params]("MMD_Project") {
+      head("Project for the Mining of Massive Datasets course.")
+      opt[Int]("seed")
+        .text(s"seed for the RNG, default: ${defaultParams.seed}")
+        .action((x, c) => c.copy(seed = x))
+      opt[Int]("customersMaxCard")
+        .text(s"customers maximum cardinality, default: ${defaultParams.customersMaxCard}")
+        .action((x, c) => c.copy(seed = x))
+      opt[Double]("minSupport")
+        .text(s"minimal support level, default: ${defaultParams.minSupport}")
+        .action((x, c) => c.copy(minSupport = x))
+      opt[Double]("minConfidence")
+        .text(s"minimal confidence, default: ${defaultParams.minConfidence}")
+        .action((x, c) => c.copy(minConfidence = x))
+      opt[String]("transactions")
+        .text(s"path of csv file containing the transactions, default: ${defaultParams.basketsPath}")
+        .action((x, c) => c.copy(basketsPath = x))
+      opt[String]("products")
+        .text(s"path of csv file containing the products, default: ${defaultParams.productsPath}")
+        .action((x, c) => c.copy(productsPath = x))
+    }
+
+    parser.parse(args, defaultParams) match {
+      case Some(params) => run(params)
+      case _ => sys.exit(1)
+    }
+  }
+
+  def run(params: Params): Unit = {
     // Create spark session
     val spark = SparkSession
       .builder()
@@ -20,24 +65,20 @@ object ProjectMMD {
     // Suppress info messages
     sc.setLogLevel("ERROR")
 
-    val testing = false
+    //    val testing = false
 
-    val seed = 1 // Seed for RNG
+    //    val (basketsPath, productsPath, customersMaxCard) =
+    //      if (testing) ("groceries-testing.csv", "products-categorized-testing.csv", 3)
+    //      else ("groceries.csv", "products-categorized.csv", 100)
+
     val sampleSize = 5 // Size for samples
     val numPartitions = spark.sparkContext.defaultParallelism // Partitions number for FP-growth
-    val minSupport = 0.04 // FP-growth minSupport
-    val minConfidence = 0.30 // Association Rules minConfidence
-
-    val (groceriesFilename, productsFilename, customersMaxCard) =
-      if (testing) ("groceries-testing.csv", "products-categorized-testing.csv", 3)
-      else ("groceries.csv", "products-categorized.csv", 100)
-
     val maxAbsDeviation = 0.0000001 // Used for assertions
 
-    val rand = new scala.util.Random(seed)
+    val rand = new scala.util.Random(params.seed)
 
     // Method to assign random IDs to customers
-    def getRandomId: Int = rand.nextInt(customersMaxCard)
+    def getRandomId: Int = rand.nextInt(params.customersMaxCard)
 
     // Method to mine association rules
     def mineRules(transactions: RDD[Array[Int]], minSupport: Double,
@@ -53,7 +94,8 @@ object ProjectMMD {
     }
 
     // Method to display some statistics about transactions and products
-    def displayStats(baskets: RDD[Array[String]], products: RDD[(String, Array[String])]): Unit = {
+    def displayStats(baskets: RDD[Array[String]],
+                     products: RDD[(String, Array[String])]): Unit = {
       val basketsCnt = baskets.count()
       val basketsSizes = baskets.map(_.length)
       val productsCnt = products.count()
@@ -83,13 +125,13 @@ object ProjectMMD {
     }
 
     val basketsRDD = sc
-      .textFile(groceriesFilename)
+      .textFile(params.basketsPath)
       .map(_.trim.split(',')
         .map(_.trim)
       )
 
     val productsRDD = sc
-      .textFile(productsFilename)
+      .textFile(params.productsPath)
       .map(_.trim.split(',')
         .map(_.trim)
       )
@@ -210,8 +252,8 @@ object ProjectMMD {
     val classesRDD = subClassesRDD
       .map(b => b.map(subCl => subClassesToClassesB.value.getOrElse(subCl, -1)).distinct)
 
-    val classesRules = mineRules(classesRDD, minSupport, numPartitions, minConfidence)
-    val subClassesRules = mineRules(subClassesRDD, minSupport, numPartitions, minConfidence)
+    val classesRules = mineRules(classesRDD, params.minSupport, numPartitions, params.minConfidence)
+    val subClassesRules = mineRules(subClassesRDD, params.minSupport, numPartitions, params.minConfidence)
 
     println("\n****************************************************************\n")
     println("Transactions classes sample: ")
