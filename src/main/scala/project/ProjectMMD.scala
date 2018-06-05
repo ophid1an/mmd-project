@@ -175,7 +175,12 @@ object ProjectMMD {
 
     val customers = customersRDD.collect().toMap
 
+    val customersCard = customers.size
+
     // Assertions:
+
+    // Is the number of customers equal to customersMaxCard?
+    assert(customersCard == params.customersMaxCard)
 
     // TODO: Is the ... equal to ...
     assert(basketsRDD.map(_.length).sum ==
@@ -198,8 +203,6 @@ object ProjectMMD {
     )
 
     val fractionalCustomers = customers.mapValues(_.fractional)
-
-    val customersCard = customers.size
 
     println("Customers card: " + customersCard)
     println("Folded clSpending: " + fractionalCustomers.values.foldLeft(0.0)(_ + _.clSpending.vec.values.sum))
@@ -287,11 +290,11 @@ object ProjectMMD {
       * ** Clustering ***
       * *****************/
 
-    val parsedData = assignedBasketsRDD.map {
+    val parsedData = sc.parallelize(normalizedFractionalCustomers.toSeq.map {
       case (_, v) => v.clSpending.sparseVec(productsB.value.size)
-    }
+    })
 
-    println("\n\n****** Clustering ******\n\n")
+    println("\n\n****** Clustering using customers' normalized fractional class spendings ******\n\n")
 
     Range(2, 21).foreach(clusterSize => {
       val clusters = findClusters(parsedData, params.clustersNum)

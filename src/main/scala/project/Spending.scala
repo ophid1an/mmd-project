@@ -13,9 +13,16 @@ case class Spending[A](vec: Map[A, Double]) {
 
   def fractional: Spending[A] = this.copy(vec.mapValues(_ / cnt))
 
-  // Get MLlib sparse vector
+  // Get MLlib sparse vector used for clustering
   def sparseVec(size: Int): Vector = {
-    val modifiedVec = vec.mapValues(_ => 1.0)
+    val modifiedVec = vec.map {
+      case (k, v) =>
+        // Limit maximum value to 5 in order to limit
+        // the influence of very high product-class spending
+        // (page 14 of the paper starting at line 9 from bottom)
+        if (v > 5.0) k -> 5.0
+        else k -> v
+    }
     Vectors.sparse(size, modifiedVec.toSeq.asInstanceOf[Seq[(Int, Double)]])
   }
 
