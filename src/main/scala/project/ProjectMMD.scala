@@ -23,7 +23,7 @@ object ProjectMMD {
   def main(args: Array[String]) {
     val defaultParams = Params()
 
-    val parser = new OptionParser[Params]("MMD_Project") {
+    val parser = new OptionParser[Params]("mmd-project") {
       head("Project for the Mining of Massive Datasets course.")
       opt[Int]("seed")
         .text(s"seed for the RNG, default: ${defaultParams.seed}")
