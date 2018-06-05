@@ -4,6 +4,8 @@ import org.apache.spark.mllib.fpm.{AssociationRules, FPGrowth}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.SparkSession
 import scopt.OptionParser
+import org.apache.spark.mllib.clustering.{KMeans, KMeansModel}
+import org.apache.spark.mllib.linalg.Vector
 
 object ProjectMMD {
 
@@ -78,6 +80,7 @@ object ProjectMMD {
     //      else ("groceries.csv", "products-categorized.csv", 100)
 
     val sampleSize = 5 // Size for samples
+    val iterationsNum = 20 // Iterations for KMeans
     val numPartitions = spark.sparkContext.defaultParallelism // Partitions number for FP-growth
     val maxAbsDeviation = 0.0000001 // Used for assertions
 
@@ -85,6 +88,9 @@ object ProjectMMD {
 
     // Method to assign random IDs to customers
     def getRandomId: Int = rand.nextInt(params.customersMaxCard)
+
+    def findClusters(data: RDD[Vector], clustersNum: Int): KMeansModel =
+      KMeans.train(data, clustersNum, iterationsNum)
 
     // Method to mine association rules
     def mineRules(transactions: RDD[Array[Int]], minSupport: Double,
@@ -250,6 +256,10 @@ object ProjectMMD {
       .mapValues(_.idsToStrings(taxonomy))
       .take(sampleSize).foreach(println)
 
+    /** *******************************
+      * ** Association Rules Mining ***
+      * *******************************/
+
     // Distinct RDDs
     val subClassesRDD = transformedBasketsRDD
       .map(_.distinct)
@@ -280,6 +290,25 @@ object ProjectMMD {
       println(s"${rule.antecedent.mkString("[", ",", "]")}=> " +
         s"${rule.consequent.mkString("[", ",", "]")},${rule.confidence}")
     }
+
+    /** *****************
+      * ** Clustering ***
+      * *****************/
+
+    val parsedData = assignedBasketsRDD.map {
+      case (_, v) => v.clSpending.sparseVec(productsB.value.size)
+    }
+
+
+    println("\n\n****** Clustering ******\n\n")
+
+    Range(2, 21).foreach(clusterSize => {
+      val clusters = findClusters(parsedData, params.clustersNum)
+      // Evaluate clustering by computing Within Set Sum of Squared Errors
+      println(s"Cluster size: $clusterSize")
+      println(s"Within Set Sum of Squared Errors = ${clusters.computeCost(parsedData)}\n")
+    })
+
 
     //Display statistics
     //    displayStats(basketsRDD, productsRDD)

@@ -1,5 +1,7 @@
 package project
 
+import org.apache.spark.mllib.linalg.{Vector, Vectors}
+
 case class Spending[A](vec: Map[A, Double]) {
   def cnt: Double = vec.values.sum
 
@@ -11,11 +13,17 @@ case class Spending[A](vec: Map[A, Double]) {
 
   def fractional: Spending[A] = this.copy(vec.mapValues(_ / cnt))
 
+  // Get MLlib sparse vector
+  def sparseVec(size: Int): Vector = {
+    val modifiedVec = vec.mapValues(_ => 1.0)
+    Vectors.sparse(size, modifiedVec.toSeq.asInstanceOf[Seq[(Int, Double)]])
+  }
+
   def toClString(taxonomy: Taxonomy): Spending[String] =
     this.copy(vec.map {
       case (k, v) => k match {
         case i: Int => taxonomy.idsToClasses.getOrElse(i, "") -> v
-        case _ => k.toString -> v
+        case _ => sys.error("Spending[A] with A != Int.")
       }
     })
 
@@ -23,7 +31,7 @@ case class Spending[A](vec: Map[A, Double]) {
     this.copy(vec.map {
       case (k, v) => k match {
         case i: Int => taxonomy.idsToSubClasses.getOrElse(i, "") -> v
-        case _ => k.toString -> v
+        case _ => sys.error("Spending[A] with A != Int.")
       }
     })
 
