@@ -280,10 +280,10 @@ object ProjectMMD {
         val prodClass = subClassesToClassesB.value.getOrElse(prodSubClass, -1)
         val prodSiblingSubClasses = classesToSubClassesB.value.getOrElse(prodClass, List[Int]()).toSet - prodSubClass
         val prodDirectlyAssociatedSubClasses = subClassesRules.filter(_.antecedent(0) == prodSubClass)
-          .flatMap(_.consequent).toSet -- prodSiblingSubClasses - prodSubClass
+          .flatMap(_.consequent).toSet -- prodSiblingSubClasses
         val prodIndirectlyAssociatedSubClasses = classesRules.filter(_.antecedent(0) == prodClass)
-          .flatMap(_.consequent).flatMap(cl => classesToSubClassesB.value.getOrElse(prodClass, List[Int]()))
-          .toSet -- prodDirectlyAssociatedSubClasses -- prodSiblingSubClasses - prodSubClass
+          .flatMap(_.consequent).flatMap(cl => classesToSubClassesB.value.getOrElse(cl, List[Int]()))
+          .toSet -- prodDirectlyAssociatedSubClasses
 
         (prodId,
           (Product(Map[Int, Double]())
