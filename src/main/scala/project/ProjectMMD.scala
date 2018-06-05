@@ -272,42 +272,34 @@ object ProjectMMD {
     val subClassesRules = mineRules(subClassesRDD, params.minSupport, numPartitions, params.minConfidence)
       .filter(_.antecedent.length == 1)
 
-    // Content-based products RDD
-    val transformedProductsRDD = productsRDD.map {
-      case (k, v) => {
+    // Products RDD for content-based and collaborative filtering
+    val transformedProductsRDD: RDD[(Int, Product[Int])] = productsRDD.map {
+      case (k, _) => {
         val prodId = productsB.value.getOrElse(k, -1)
         val prodSubClass = productsToSubClassesB.value.getOrElse(prodId, -1)
         val prodClass = subClassesToClassesB.value.getOrElse(prodSubClass, -1)
-        val prodSiblingSubClasses = classesToSubClassesB.value.getOrElse(prodClass, List[Int]())
+        val prodSiblingSubClasses = classesToSubClassesB.value.getOrElse(prodClass, List[Int]()).toSet - prodSubClass
+        val prodDirectlyAssociatedSubClasses = subClassesRules.filter(_.antecedent(0) == prodSubClass)
+          .flatMap(_.consequent).toSet -- prodSiblingSubClasses - prodSubClass
+        val prodIndirectlyAssociatedSubClasses = classesRules.filter(_.antecedent(0) == prodClass)
+          .flatMap(_.consequent).flatMap(cl => classesToSubClassesB.value.getOrElse(prodClass, List[Int]()))
+          .toSet -- prodDirectlyAssociatedSubClasses -- prodSiblingSubClasses - prodSubClass
+
         (prodId,
           (Product(Map[Int, Double]())
+            + prodIndirectlyAssociatedSubClasses.map(x => x -> .25).toMap // within subclass of associated class
+            + prodDirectlyAssociatedSubClasses.map(x => x -> 1.0).toMap // within associated class
             + prodSiblingSubClasses.map(x => x -> 0.5).toMap) // subclass with same class
-            .setOwnSubClass(prodSubClass) // within same subclass
+            + Map(prodSubClass -> 1.0) // within same subclass
         )
       }
     }
 
-    println(s"transformedProductsRDD size: ${transformedProductsRDD.count()}")
+    println("\n\n**** Products Vectors ****\n\n")
+    transformedProductsRDD.collect().foreach(prod => {
+      println(s"Product ID: ${prod._1}\n\tVector: ${prod._2}\n")
+    })
 
-    println("\n****************************************************************\n")
-    println("Transactions classes sample: ")
-    val sample = classesRDD.map(b => b.map(cl => taxonomy.idsToClasses.getOrElse(cl, "NADA")))
-      .take(sampleSize)
-    sample.foreach(e => println(e.mkString(", ")))
-    println("Transactions classes sample size: " + sample.map(_.length).mkString(", "))
-
-    println("\n--------------------- Rules for classes ----------------------\n")
-
-    classesRules.foreach { rule =>
-      println(s"${rule.antecedent.mkString("[", ",", "]")}=> " +
-        s"${rule.consequent.mkString("[", ",", "]")},${rule.confidence}")
-    }
-    println("\n--------------------- Rules for subclasses -------------------\n")
-
-    subClassesRules.foreach { rule =>
-      println(s"${rule.antecedent.mkString("[", ",", "]")}=> " +
-        s"${rule.consequent.mkString("[", ",", "]")},${rule.confidence}")
-    }
 
     /** *****************
       * ** Clustering ***
