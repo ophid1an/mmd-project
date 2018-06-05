@@ -73,12 +73,6 @@ object ProjectMMD {
     // Suppress info messages
     sc.setLogLevel("ERROR")
 
-    //    val testing = false
-
-    //    val (basketsPath, productsPath, customersMaxCard) =
-    //      if (testing) ("groceries-testing.csv", "products-categorized-testing.csv", 3)
-    //      else ("groceries.csv", "products-categorized.csv", 100)
-
     val sampleSize = 5 // Size for samples
     val iterationsNum = 20 // Iterations for KMeans
     val numPartitions = spark.sparkContext.defaultParallelism // Partitions number for FP-growth
@@ -172,11 +166,10 @@ object ProjectMMD {
     val assignedBasketsRDD = transformedBasketsRDD
       .map(b => {
         val clArr = b.map(subClassesToClassesB.value.getOrElse(_, -1))
-        Customer(getRandomId,
-          Spending[Int]() ++ Spending(clArr: _*),
+        Customer(Spending[Int]() ++ Spending(clArr: _*),
           Spending[Int]() ++ Spending(b: _*))
       })
-      .map(customer => customer.id -> customer)
+      .map(customer => getRandomId -> customer)
 
     val customersRDD = assignedBasketsRDD.reduceByKey(_ ++ _)
 
@@ -237,8 +230,7 @@ object ProjectMMD {
       .mapValues(customersCard / _)
 
     val normalizedFractionalCustomers = fractionalCustomers.mapValues(
-      c => Customer(c.id,
-        c.clSpending * adjustedFractionalClSpendingsTotal,
+      c => Customer(c.clSpending * adjustedFractionalClSpendingsTotal,
         c.subClSpending * adjustedFractionalSubClSpendingsTotal)
     )
 
@@ -298,7 +290,6 @@ object ProjectMMD {
     val parsedData = assignedBasketsRDD.map {
       case (_, v) => v.clSpending.sparseVec(productsB.value.size)
     }
-
 
     println("\n\n****** Clustering ******\n\n")
 
