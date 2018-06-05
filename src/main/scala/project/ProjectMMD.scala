@@ -12,6 +12,8 @@ object ProjectMMD {
                      seed: Int = 1,
                      // Customers maximum cardinality
                      customersMaxCard: Int = 100,
+                     // Number of clusters
+                     clustersNum: Int = 5,
                      // FP-growth minSupport
                      minSupport: Double = 0.04,
                      // Association Rules minConfidence
@@ -28,13 +30,16 @@ object ProjectMMD {
       opt[Int]("seed")
         .text(s"seed for the RNG, default: ${defaultParams.seed}")
         .action((x, c) => c.copy(seed = x))
-      opt[Int]("customersMaxCard")
+      opt[Int]("customers")
         .text(s"customers maximum cardinality, default: ${defaultParams.customersMaxCard}")
-        .action((x, c) => c.copy(seed = x))
-      opt[Double]("minSupport")
+        .action((x, c) => c.copy(customersMaxCard = x))
+      opt[Int]("clusters")
+        .text(s"number of customer clusters, default: ${defaultParams.clustersNum}")
+        .action((x, c) => c.copy(clustersNum = x))
+      opt[Double]("support")
         .text(s"minimal support level, default: ${defaultParams.minSupport}")
         .action((x, c) => c.copy(minSupport = x))
-      opt[Double]("minConfidence")
+      opt[Double]("confidence")
         .text(s"minimal confidence, default: ${defaultParams.minConfidence}")
         .action((x, c) => c.copy(minConfidence = x))
       opt[String]("transactions")
@@ -43,6 +48,7 @@ object ProjectMMD {
       opt[String]("products")
         .text(s"path of csv file containing the products, default: ${defaultParams.productsPath}")
         .action((x, c) => c.copy(productsPath = x))
+      help("help").text("prints this usage text")
     }
 
     parser.parse(args, defaultParams) match {
