@@ -11,31 +11,32 @@ object ProjectMMD {
 
   // parameters configuration
   case class Params(
-     // Target customer for whom to provide recommendations
-     target: Int = 0,
+                     // Target customer for whom to provide recommendations
+                     target: Int = 0,
 
-     // Seed for the RNG
-     seed: Int = 1,
+                     // Seed for the RNG
+                     seed: Int = 1,
 
-     // Customers maximum cardinality
-     customersMaxCard: Int = 100,
+                     // Customers maximum cardinality
+                     customersMaxCard: Int = 100,
 
-     // Number of clusters
-     clustersNum: Int = 6,
+                     // Number of clusters
+                     clustersNum: Int = 6,
 
-     // FP-growth minSupport
-     minSupport: Double = 0.04,
+                     // FP-growth minSupport
+                     minSupport: Double = 0.04,
 
-     // Association Rules minConfidence
-     minConfidence: Double = 0.30,
+                     // Association Rules minConfidence
+                     minConfidence: Double = 0.30,
 
-     // relative path to csv data
-     basketsPath: String = "groceries.csv",
-     productsPath: String = "products-categorized.csv"
-  )
+                     // relative path to csv data
+                     basketsPath: String = "groceries.csv",
+                     productsPath: String = "products-categorized.csv"
+                   )
 
   /**
     * Main method
+    *
     * @param args
     */
   def main(args: Array[String]) {
@@ -80,6 +81,7 @@ object ProjectMMD {
 
   /**
     * Runs most of the business logic. Invoked by main
+    *
     * @param params
     */
   def run(params: Params): Unit = {
@@ -183,9 +185,9 @@ object ProjectMMD {
     // normalize on customer's total spending
     val fractionalCustomers = customers.mapValues(_.fractional)
 
-//    println("Customers card: " + customersCard)
-//    println("Folded clSpending: " + fractionalCustomers.values.foldLeft(0.0)(_ + _.clSpending.vec.values.sum))
-//    println("Folded subClSpending: " + fractionalCustomers.values.foldLeft(0.0)(_ + _.subClSpending.vec.values.sum))
+    //    println("Customers card: " + customersCard)
+    //    println("Folded clSpending: " + fractionalCustomers.values.foldLeft(0.0)(_ + _.clSpending.vec.values.sum))
+    //    println("Folded subClSpending: " + fractionalCustomers.values.foldLeft(0.0)(_ + _.subClSpending.vec.values.sum))
 
     // More assertions:
     assert(Math.abs(customersCard -
@@ -215,20 +217,20 @@ object ProjectMMD {
     )
 
     // Print customers sample
-//    println("\n************ Customers sample ****************\n")
-//    customers
-//      .mapValues(_.idsToStrings(taxonomy))
-//      .take(sampleSize).foreach(println)
-//
-//    println("\n******** Fractional Customers sample *********\n")
-//    fractionalCustomers
-//      .mapValues(_.idsToStrings(taxonomy))
-//      .take(sampleSize).foreach(println)
-//
-//    println("\n*** Normalized Fractional Customers sample ***\n")
-//    normalizedFractionalCustomers
-//      .mapValues(_.idsToStrings(taxonomy))
-//      .take(sampleSize).foreach(println)
+    //    println("\n************ Customers sample ****************\n")
+    //    customers
+    //      .mapValues(_.idsToStrings(taxonomy))
+    //      .take(sampleSize).foreach(println)
+    //
+    //    println("\n******** Fractional Customers sample *********\n")
+    //    fractionalCustomers
+    //      .mapValues(_.idsToStrings(taxonomy))
+    //      .take(sampleSize).foreach(println)
+    //
+    //    println("\n*** Normalized Fractional Customers sample ***\n")
+    //    normalizedFractionalCustomers
+    //      .mapValues(_.idsToStrings(taxonomy))
+    //      .take(sampleSize).foreach(println)
 
     /** *******************************
       * ** Association Rules Mining ***
@@ -277,10 +279,10 @@ object ProjectMMD {
       }
     }
 
-//    println("\n\n**** Products Vectors ****\n\n")
-//    transformedProductsRDD.collect().foreach(prod => {
-//      println(s"Product ID: ${prod._1}\n\tVector: ${prod._2}\n")
-//    })
+    //    println("\n\n**** Products Vectors ****\n\n")
+    //    transformedProductsRDD.collect().foreach(prod => {
+    //      println(s"Product ID: ${prod._1}\n\tVector: ${prod._2}\n")
+    //    })
 
 
     /** *****************
@@ -291,27 +293,45 @@ object ProjectMMD {
       case (_, v) => v.clSpending.sparseVec(classesToSubClassesB.value.size)
     })
 
-//    println("\n\n****** Clustering using customers' normalized fractional class spendings ******\n\n")
+    //    println("\n\n****** Clustering using customers' normalized fractional class spendings ******\n\n")
 
     // Calculate WSSSE for different values of k
-//    Range(1, 21).foreach(clusterSize => {
-//      val clusters = findClusters(parsedData, clusterSize, iterationsNum)
-//      // Evaluate clustering by computing Within Set Sum of Squared Errors
-//      println(s"Cluster size: $clusterSize")
-//      println(s"Within Set Sum of Squared Errors = ${clusters.computeCost(parsedData)}\n")
-//    })
+    //    Range(1, 21).foreach(clusterSize => {
+    //      val clusters = findClusters(parsedData, clusterSize, iterationsNum)
+    //      // Evaluate clustering by computing Within Set Sum of Squared Errors
+    //      println(s"Cluster size: $clusterSize")
+    //      println(s"Within Set Sum of Squared Errors = ${clusters.computeCost(parsedData)}\n")
+    //    })
 
 
-    //Display statistics
-    //displayStats(basketsRDD, productsRDD, sampleSize)
+    /** *******************************
+      * ** Products recommendations ***
+      * *******************************/
 
+    val initialResults = transformedProductsRDD.map {
+      case (prodId, prod) => prodId -> computeSimilarity(
+        normalizedFractionalCustomers.getOrElse(params.target,
+          Customer[Int](Spending(), Spending())
+        ), prod
+      )
+    }
+
+    println(initialResults)
     spark.stop()
 
-  } // run
+  }
 
+  // Method to compute cosine similarity between a Customer object and a Product object
+  def computeSimilarity(customer: Customer[Int], product: Product[Int]): Double = {
+    def dotProduct[A](map1: Map[A, Double], map2: Map[A, Double]): Map[A, Double] =
+      map1.foldLeft(map1)((acc, i) => acc.updated(i._1, i._2 * map2.getOrElse(i._1, 0.0)))
 
+    val numerator = dotProduct(customer.subClSpending.vec, product.vec).values.sum
+    val denominator = customer.subClSpending.normL2 * product.normL2
+    numerator / denominator
+  }
 
-
+  // Method to perform clustering using KMeans
   def findClusters(data: RDD[Vector], clustersNum: Int, iterationsNum: Int): KMeansModel =
     KMeans.train(data, clustersNum, iterationsNum)
 

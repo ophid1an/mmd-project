@@ -3,6 +3,9 @@ package project
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 
 case class Spending[A](vec: Map[A, Double]) {
+  lazy val normL2: Double = Math.sqrt(vec.values.map(x => x * x).sum)
+
+  // TODO change cnt to sum
   def cnt: Double = vec.values.sum
 
   def ++(other: Spending[A]): Spending[A] =
