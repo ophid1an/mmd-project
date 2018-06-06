@@ -175,9 +175,9 @@ object ProjectMMD {
 
     val customersCard = customers.size
 
-    // Better be safe than sorry
+    // Alert if customers cardinality is less than customersMaxCard
     if (customersCard != params.customersMaxCard)
-      sys.error("Number of customers doesn't equal customersMaxCard")
+      println("***** Number of customers doesn't equal customersMaxCard *****")
 
     // Assertions:
 
@@ -299,6 +299,12 @@ object ProjectMMD {
 
     val targetVec = normalizedFractionalCustomers.getOrElse(params.target,
       Customer(Spending[Int](), Spending[Int]())).subClSpending.vec
+
+    if (targetVec.isEmpty) {
+      println("***** Unfortunately there is no customer with such ID *****")
+      sys.exit(1)
+    }
+
     val previousPurchasedProducts: Set[Int] = assignedBasketsRDD.
       filter { case (customerId, _) => 0 == customerId }
       .flatMap { case (_, basket) => basket }
