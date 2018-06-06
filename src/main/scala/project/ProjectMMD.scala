@@ -11,6 +11,8 @@ object ProjectMMD {
 
   // parameters configuration
   case class Params(
+     // Target customer for whom to provide recommendations
+     target: Int = 0,
 
      // Seed for the RNG
      seed: Int = 1,
@@ -42,6 +44,9 @@ object ProjectMMD {
 
     val parser = new OptionParser[Params]("mmd-project") {
       head("Project for the Mining of Massive Datasets course.")
+      opt[Int]("target")
+        .text(s"Target customer ID for whom to provide recommendations, default: ${defaultParams.target}")
+        .action((x, c) => c.copy(target = x))
       opt[Int]("seed")
         .text(s"seed for the RNG, default: ${defaultParams.seed}")
         .action((x, c) => c.copy(seed = x))
@@ -214,12 +219,12 @@ object ProjectMMD {
 //    customers
 //      .mapValues(_.idsToStrings(taxonomy))
 //      .take(sampleSize).foreach(println)
-
+//
 //    println("\n******** Fractional Customers sample *********\n")
 //    fractionalCustomers
 //      .mapValues(_.idsToStrings(taxonomy))
 //      .take(sampleSize).foreach(println)
-
+//
 //    println("\n*** Normalized Fractional Customers sample ***\n")
 //    normalizedFractionalCustomers
 //      .mapValues(_.idsToStrings(taxonomy))
@@ -289,7 +294,7 @@ object ProjectMMD {
 //    println("\n\n****** Clustering using customers' normalized fractional class spendings ******\n\n")
 
     // Calculate WSSSE for different values of k
-//    Range(2, 21).foreach(clusterSize => {
+//    Range(1, 21).foreach(clusterSize => {
 //      val clusters = findClusters(parsedData, clusterSize, iterationsNum)
 //      // Evaluate clustering by computing Within Set Sum of Squared Errors
 //      println(s"Cluster size: $clusterSize")

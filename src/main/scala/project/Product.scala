@@ -8,7 +8,7 @@ case class Product[A](vec: Map[A, Double] = Map()) {
     else
       sys.error("Product.+ with a map with common key.")
   }
-
-  def setOwnSubClass(id: A): Product[A] =
-    this.copy(vec.updated(id, 1.0))
+//
+//  def setOwnSubClass(id: A): Product[A] =
+//    this.copy(vec.updated(id, 1.0))
 }
