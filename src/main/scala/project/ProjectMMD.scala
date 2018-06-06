@@ -9,22 +9,35 @@ import org.apache.spark.mllib.linalg.Vector
 
 object ProjectMMD {
 
+  // parameters configuration
   case class Params(
-                     // Seed for the RNG
-                     seed: Int = 1,
-                     // Customers maximum cardinality
-                     customersMaxCard: Int = 100,
-                     // Number of clusters
-                     clustersNum: Int = 5,
-                     // FP-growth minSupport
-                     minSupport: Double = 0.04,
-                     // Association Rules minConfidence
-                     minConfidence: Double = 0.30,
-                     basketsPath: String = "groceries.csv",
-                     productsPath: String = "products-categorized.csv"
-                   )
 
+     // Seed for the RNG
+     seed: Int = 1,
+
+     // Customers maximum cardinality
+     customersMaxCard: Int = 100,
+
+     // Number of clusters
+     clustersNum: Int = 6,
+
+     // FP-growth minSupport
+     minSupport: Double = 0.04,
+
+     // Association Rules minConfidence
+     minConfidence: Double = 0.30,
+
+     // relative path to csv data
+     basketsPath: String = "groceries.csv",
+     productsPath: String = "products-categorized.csv"
+  )
+
+  /**
+    * Main method
+    * @param args
+    */
   def main(args: Array[String]) {
+
     val defaultParams = Params()
 
     val parser = new OptionParser[Params]("mmd-project") {
@@ -53,13 +66,19 @@ object ProjectMMD {
       help("help").text("prints this usage text")
     }
 
+    // use valid defaultParams or exit
     parser.parse(args, defaultParams) match {
       case Some(params) => run(params)
       case _ => sys.exit(1)
     }
   }
 
+  /**
+    * Runs most of the business logic. Invoked by main
+    * @param params
+    */
   def run(params: Params): Unit = {
+
     // Create spark session
     val spark = SparkSession
       .builder()
@@ -78,64 +97,20 @@ object ProjectMMD {
     val numPartitions = spark.sparkContext.defaultParallelism // Partitions number for FP-growth
     val maxAbsDeviation = 0.0000001 // Used for assertions
 
+    // initialize a random generator
     val rand = new scala.util.Random(params.seed)
 
     // Method to assign random IDs to customers
     def getRandomId: Int = rand.nextInt(params.customersMaxCard)
 
-    def findClusters(data: RDD[Vector], clustersNum: Int): KMeansModel =
-      KMeans.train(data, clustersNum, iterationsNum)
-
-    // Method to mine association rules
-    def mineRules(transactions: RDD[Array[Int]], minSupport: Double,
-                  numPartitions: Int, minConfidence: Double)
-    : Array[AssociationRules.Rule[Int]] = {
-
-      val model = new FPGrowth()
-        .setMinSupport(minSupport)
-        .setNumPartitions(numPartitions)
-        .run(transactions)
-
-      model.generateAssociationRules(minConfidence).collect()
-    }
-
-    // Method to display some statistics about transactions and products
-    def displayStats(baskets: RDD[Array[String]],
-                     products: RDD[(String, Array[String])]): Unit = {
-      val basketsCnt = baskets.count()
-      val basketsSizes = baskets.map(_.length)
-      val productsCnt = products.count()
-
-      println("\n**********")
-      println("Statistics")
-      println("**********")
-
-      println("\nBaskets")
-      println("------------------------------")
-      println("Count: " + basketsCnt)
-
-      println("Baskets sample: ")
-      for (i <- baskets.take(sampleSize)) println("\t" + i.mkString(", "))
-
-      println("Baskets sample sizes: " + basketsSizes.take(sampleSize).mkString(", "))
-      println("Min size: " + basketsSizes.min())
-      println("Max size: " + basketsSizes.max())
-      println("Mean size: " + basketsSizes.mean())
-
-      println("\nProducts")
-      println("------------------------------")
-      println("Count: " + productsCnt)
-
-      println("Products sample: ")
-      for (i <- products.take(sampleSize)) println("\t" + i._1 + " -> " + i._2.mkString(", "))
-    }
-
+    // load the baskets in RDD
     val basketsRDD = sc
       .textFile(params.basketsPath)
       .map(_.trim.split(',')
         .map(_.trim)
       )
 
+    // load the products in RDD
     val productsRDD = sc
       .textFile(params.productsPath)
       .map(_.trim.split(',')
@@ -148,6 +123,7 @@ object ProjectMMD {
         )
       )
 
+
     val taxonomy = productsRDD.collect()
       .foldLeft(Taxonomy())((acc, i) => acc ++ Taxonomy(i._1, i._2))
 
@@ -158,11 +134,11 @@ object ProjectMMD {
     val classesToSubClassesB = sc.broadcast(taxonomy.classesToSubClasses)
 
     val transformedBasketsRDD = basketsRDD
-      .map(b => b.map(bItem => productsToSubClassesB.value.getOrElse(productsB.value.getOrElse(bItem, -1), -1)))
+      .map(b => b
+        .map(bItem => productsToSubClassesB.value.getOrElse(productsB.value.getOrElse(bItem, -1), -1)))
       .cache()
 
     // Assign each transaction to a random customer ID
-    // TODO: RDD Structure
     // NOTE: Customers cardinality may be less than customersMaxCard
     val assignedBasketsRDD = transformedBasketsRDD
       .map(b => {
@@ -183,40 +159,34 @@ object ProjectMMD {
     // Is the number of customers equal to customersMaxCard?
     assert(customersCard == params.customersMaxCard)
 
-    // TODO: Is the ... equal to ...
     assert(basketsRDD.map(_.length).sum ==
       customers.values.foldLeft(0.0)(_ + _.clSpending.vec.values.sum)
     )
 
-    // TODO: Is the ... equal to ...
     assert(basketsRDD.map(_.length).sum ==
       customers.values.foldLeft(0.0)(_ + _.subClSpending.vec.values.sum)
     )
 
-    // TODO: Is the ... equal to ...
     assert(basketsRDD.map(_.length).sum ==
       customers.values.foldLeft(0.0)(_ + _.clSpending.cnt)
     )
 
-    // TODO: Is the ... equal to ...
     assert(basketsRDD.map(_.length).sum ==
       customers.values.foldLeft(0.0)(_ + _.subClSpending.cnt)
     )
 
+    // normalize on customer's total spending
     val fractionalCustomers = customers.mapValues(_.fractional)
 
-    println("Customers card: " + customersCard)
-    println("Folded clSpending: " + fractionalCustomers.values.foldLeft(0.0)(_ + _.clSpending.vec.values.sum))
-    println("Folded subClSpending: " + fractionalCustomers.values.foldLeft(0.0)(_ + _.subClSpending.vec.values.sum))
+//    println("Customers card: " + customersCard)
+//    println("Folded clSpending: " + fractionalCustomers.values.foldLeft(0.0)(_ + _.clSpending.vec.values.sum))
+//    println("Folded subClSpending: " + fractionalCustomers.values.foldLeft(0.0)(_ + _.subClSpending.vec.values.sum))
 
-    // Assertions:
-
-    // TODO: Is the ... roughly equal to ...
+    // More assertions:
     assert(Math.abs(customersCard -
       fractionalCustomers.values.foldLeft(0.0)(_ + _.clSpending.vec.values.sum)) < maxAbsDeviation
     )
 
-    // TODO: Is the ... roughly equal to ...
     assert(Math.abs(customersCard -
       fractionalCustomers.values.foldLeft(0.0)(_ + _.subClSpending.vec.values.sum)) < maxAbsDeviation
     )
@@ -233,24 +203,27 @@ object ProjectMMD {
     val adjustedFractionalSubClSpendingsTotal = fractionalSubClSpendingsTotal.vec
       .mapValues(customersCard / _)
 
+    // normalize on product's popularity
     val normalizedFractionalCustomers = fractionalCustomers.mapValues(
       c => Customer(c.clSpending * adjustedFractionalClSpendingsTotal,
         c.subClSpending * adjustedFractionalSubClSpendingsTotal)
     )
 
     // Print customers sample
-    println("\n************ Customers sample ****************\n")
-    customers
-      .mapValues(_.idsToStrings(taxonomy))
-      .take(sampleSize).foreach(println)
-    println("\n******** Fractional Customers sample *********\n")
-    fractionalCustomers
-      .mapValues(_.idsToStrings(taxonomy))
-      .take(sampleSize).foreach(println)
-    println("\n*** Normalized Fractional Customers sample ***\n")
-    normalizedFractionalCustomers
-      .mapValues(_.idsToStrings(taxonomy))
-      .take(sampleSize).foreach(println)
+//    println("\n************ Customers sample ****************\n")
+//    customers
+//      .mapValues(_.idsToStrings(taxonomy))
+//      .take(sampleSize).foreach(println)
+
+//    println("\n******** Fractional Customers sample *********\n")
+//    fractionalCustomers
+//      .mapValues(_.idsToStrings(taxonomy))
+//      .take(sampleSize).foreach(println)
+
+//    println("\n*** Normalized Fractional Customers sample ***\n")
+//    normalizedFractionalCustomers
+//      .mapValues(_.idsToStrings(taxonomy))
+//      .take(sampleSize).foreach(println)
 
     /** *******************************
       * ** Association Rules Mining ***
@@ -266,15 +239,18 @@ object ProjectMMD {
       .map(b => b.map(subCl => subClassesToClassesB.value.getOrElse(subCl, -1)).distinct)
       .cache()
 
-    // Mine rules for classes and subclasses and get rules with antecedent length of 1
+    // Mine association rules on classes level & filter on minSupport, minConfidence, itemset size == 1
     val classesRules = mineRules(classesRDD, params.minSupport, numPartitions, params.minConfidence)
       .filter(_.antecedent.length == 1)
+
+    // Mine association rules on subclass level & filter on minSupport, minConfidence, itemset size == 1
     val subClassesRules = mineRules(subClassesRDD, params.minSupport, numPartitions, params.minConfidence)
       .filter(_.antecedent.length == 1)
 
     // Products RDD for content-based and collaborative filtering
     val transformedProductsRDD: RDD[(Int, Product[Int])] = productsRDD.map {
       case (k, _) => {
+
         val prodId = productsB.value.getOrElse(k, -1)
         val prodSubClass = productsToSubClassesB.value.getOrElse(prodId, -1)
         val prodClass = subClassesToClassesB.value.getOrElse(prodSubClass, -1)
@@ -285,6 +261,7 @@ object ProjectMMD {
           .flatMap(_.consequent).flatMap(cl => classesToSubClassesB.value.getOrElse(cl, List[Int]()))
           .toSet -- prodDirectlyAssociatedSubClasses
 
+        // compute score for P^(n) vector
         (prodId,
           (Product(Map[Int, Double]())
             + prodIndirectlyAssociatedSubClasses.map(x => x -> .25).toMap // within subclass of associated class
@@ -295,10 +272,10 @@ object ProjectMMD {
       }
     }
 
-    println("\n\n**** Products Vectors ****\n\n")
-    transformedProductsRDD.collect().foreach(prod => {
-      println(s"Product ID: ${prod._1}\n\tVector: ${prod._2}\n")
-    })
+//    println("\n\n**** Products Vectors ****\n\n")
+//    transformedProductsRDD.collect().foreach(prod => {
+//      println(s"Product ID: ${prod._1}\n\tVector: ${prod._2}\n")
+//    })
 
 
     /** *****************
@@ -309,20 +286,72 @@ object ProjectMMD {
       case (_, v) => v.clSpending.sparseVec(productsB.value.size)
     })
 
-    println("\n\n****** Clustering using customers' normalized fractional class spendings ******\n\n")
+//    println("\n\n****** Clustering using customers' normalized fractional class spendings ******\n\n")
 
-    Range(2, 21).foreach(clusterSize => {
-      val clusters = findClusters(parsedData, clusterSize)
-      // Evaluate clustering by computing Within Set Sum of Squared Errors
-      println(s"Cluster size: $clusterSize")
-      println(s"Within Set Sum of Squared Errors = ${clusters.computeCost(parsedData)}\n")
-    })
+    // Calculate WSSSE for different values of k
+//    Range(2, 21).foreach(clusterSize => {
+//      val clusters = findClusters(parsedData, clusterSize, iterationsNum)
+//      // Evaluate clustering by computing Within Set Sum of Squared Errors
+//      println(s"Cluster size: $clusterSize")
+//      println(s"Within Set Sum of Squared Errors = ${clusters.computeCost(parsedData)}\n")
+//    })
 
 
     //Display statistics
-    //    displayStats(basketsRDD, productsRDD)
+    //displayStats(basketsRDD, productsRDD, sampleSize)
 
     spark.stop()
+
+  } // run
+
+
+
+
+  def findClusters(data: RDD[Vector], clustersNum: Int, iterationsNum: Int): KMeansModel =
+    KMeans.train(data, clustersNum, iterationsNum)
+
+  // Method to mine association rules
+  def mineRules(transactions: RDD[Array[Int]], minSupport: Double,
+                numPartitions: Int, minConfidence: Double)
+  : Array[AssociationRules.Rule[Int]] = {
+
+    val model = new FPGrowth()
+      .setMinSupport(minSupport)
+      .setNumPartitions(numPartitions)
+      .run(transactions)
+
+    model.generateAssociationRules(minConfidence).collect()
+  }
+
+  // Method to display some statistics about transactions and products
+  def displayStats(baskets: RDD[Array[String]],
+                   products: RDD[(String, Array[String])], sampleSize: Int): Unit = {
+    val basketsCnt = baskets.count()
+    val basketsSizes = baskets.map(_.length)
+    val productsCnt = products.count()
+
+    println("\n**********")
+    println("Statistics")
+    println("**********")
+
+    println("\nBaskets")
+    println("------------------------------")
+    println("Count: " + basketsCnt)
+
+    println("Baskets sample: ")
+    for (i <- baskets.take(sampleSize)) println("\t" + i.mkString(", "))
+
+    println("Baskets sample sizes: " + basketsSizes.take(sampleSize).mkString(", "))
+    println("Min size: " + basketsSizes.min())
+    println("Max size: " + basketsSizes.max())
+    println("Mean size: " + basketsSizes.mean())
+
+    println("\nProducts")
+    println("------------------------------")
+    println("Count: " + productsCnt)
+
+    println("Products sample: ")
+    for (i <- products.take(sampleSize)) println("\t" + i._1 + " -> " + i._2.mkString(", "))
   }
 
 }
