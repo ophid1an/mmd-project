@@ -333,6 +333,7 @@ object ProjectMMD {
       val subClassName = taxonomy.idsToSubClasses(subClassId)
       println(s"ID: $k / Name: $prodName\n\tClass: $className\n\tSubclass: $subClassName\n\tSimilarity: $v")
     }
+    println(s"\nNumber of recommendations: ${filteredResults.size}")
 
     spark.stop()
 
@@ -341,8 +342,8 @@ object ProjectMMD {
   case class Filter(input: List[(Int, Double)], previousPurchasedProducts: Set[Int],
                     taxonomy: Taxonomy, classes: Map[Int, Int] = Map(),
                     subClasses: Map[Int, Int] = Map(), results: List[(Int, Double)] = List()) {
-    val maxProductsPerProductSubClass = 3
-    val maxProductsPerProductClass = 5
+    val maxProductsPerProductSubClass = 1
+    val maxProductsPerProductClass = 2
 
     // Apply constraints for results
     // 6th line from the bottom of page 11 of paper
@@ -358,14 +359,15 @@ object ProjectMMD {
 
         if (previousPurchasedProducts.contains(prodId) ||
           prodSubClassesCard >= maxProductsPerProductSubClass ||
-          prodClassesCard >= maxProductsPerProductClass)
+          prodClassesCard >= maxProductsPerProductClass
+        )
           this.copy(input.tail, previousPurchasedProducts, taxonomy,
-            classes, subClasses, results)
+            classes, subClasses, results).applyFilter
         else
           this.copy(input.tail, previousPurchasedProducts, taxonomy,
             classes.updated(prodClass, prodClassesCard + 1),
             subClasses.updated(prodSubClass, prodSubClassesCard + 1),
-            results ++ List(input.head))
+            results ++ List(input.head)).applyFilter
       }
     }
   }
