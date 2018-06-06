@@ -317,7 +317,7 @@ object ProjectMMD {
     }
 
     // Sort results by descending similarity
-    val sortedResults = initialResults.collect().sortBy(_._2).toList
+    val sortedResults = initialResults.collect().sortWith(_._2 > _._2).toList
 
     // Get filtered results
     val filteredResults = Filter(sortedResults, previousPurchasedProducts, taxonomy)
