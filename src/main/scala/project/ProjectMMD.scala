@@ -21,7 +21,7 @@ object ProjectMMD {
                      customersMaxCard: Int = 100,
 
                      // Number of clusters
-                     clustersNum: Int = 6,
+                     clustersNum: Int = 7,
 
                      // FP-growth minSupport
                      minSupport: Double = 0.04,
@@ -104,20 +104,20 @@ object ProjectMMD {
     val numPartitions = spark.sparkContext.defaultParallelism // Partitions number for FP-growth
     val maxAbsDeviation = 0.0000001 // Used for assertions
 
-    // initialize a random generator
+    // Initialize a random generator
     val rand = new scala.util.Random(params.seed)
 
     // Method to assign random IDs to customers
     def getRandomId: Int = rand.nextInt(params.customersMaxCard)
 
-    // load the baskets in RDD
+    // Load the baskets in RDD
     val basketsRDD = sc
       .textFile(params.basketsPath)
       .map(_.trim.split(',')
         .map(_.trim)
       )
 
-    // load the products in RDD
+    // Load the products in RDD
     val productsRDD = sc
       .textFile(params.productsPath)
       .map(_.trim.split(',')
@@ -130,7 +130,7 @@ object ProjectMMD {
         )
       )
 
-
+    // Create Taxonomy object with product related information
     val taxonomy = productsRDD.collect()
       .foldLeft(Taxonomy())((acc, i) => acc ++ Taxonomy(i._1, i._2))
 
@@ -140,31 +140,46 @@ object ProjectMMD {
     val subClassesToClassesB = sc.broadcast(taxonomy.subClassesToClasses)
     val classesToSubClassesB = sc.broadcast(taxonomy.classesToSubClasses)
 
-    val transformedBasketsRDD = basketsRDD
+    // Convert each product name in each transaction to its corresponding id
+    val convertedBasketsRDD: RDD[Array[Int]] = basketsRDD
       .map(b => b
-        .map(bItem => productsToSubClassesB.value.getOrElse(productsB.value.getOrElse(bItem, -1), -1)))
+        .map(prodName => productsB.value.getOrElse(prodName, -1)))
       .cache()
 
-    // Assign each transaction to a random customer ID
+    // Assign each transaction to a customer id
+    val assignedBasketsRDD: RDD[(Int, Array[Int])] = convertedBasketsRDD
+      .map(b => getRandomId -> b)
+      .cache()
+
+    // Transform each product id in each assigned transaction to its corresponding subclass id
+    val assignedSubClassesBasketsRDD: RDD[(Int, Array[Int])] = assignedBasketsRDD
+      .mapValues(b => b
+        .map(prodId => productsToSubClassesB.value.getOrElse(prodId, -1)))
+      .cache()
+
+    // Transform each assigned transaction to a customer spending vector and
     // NOTE: Customers cardinality may be less than customersMaxCard
-    val assignedBasketsRDD = transformedBasketsRDD
-      .map(b => {
+    val assignedAndTransformedBasketsRDD: RDD[(Int, Customer[Int])] = assignedSubClassesBasketsRDD
+      .mapValues(b => {
         val clArr = b.map(subClassesToClassesB.value.getOrElse(_, -1))
         Customer(Spending[Int]() ++ Spending(clArr: _*),
           Spending[Int]() ++ Spending(b: _*))
       })
-      .map(customer => getRandomId -> customer)
 
-    val customersRDD = assignedBasketsRDD.reduceByKey(_ ++ _)
+    // Reduce each assigned customer spending vector
+    // to get customers absolute spending vectors
+    val customersRDD = assignedAndTransformedBasketsRDD.reduceByKey(_ ++ _)
 
+    // and gather them
     val customers = customersRDD.collect().toMap
 
     val customersCard = customers.size
 
-    // Assertions:
+    // Better be safe than sorry
+    if (customersCard != params.customersMaxCard)
+      sys.error("Number of customers doesn't equal customersMaxCard")
 
-    // Is the number of customers equal to customersMaxCard?
-    assert(customersCard == params.customersMaxCard)
+    // Assertions:
 
     assert(basketsRDD.map(_.length).sum ==
       customers.values.foldLeft(0.0)(_ + _.clSpending.vec.values.sum)
@@ -182,12 +197,8 @@ object ProjectMMD {
       customers.values.foldLeft(0.0)(_ + _.subClSpending.cnt)
     )
 
-    // normalize on customer's total spending
+    // Get customers fractional spending vectors
     val fractionalCustomers = customers.mapValues(_.fractional)
-
-    //    println("Customers card: " + customersCard)
-    //    println("Folded clSpending: " + fractionalCustomers.values.foldLeft(0.0)(_ + _.clSpending.vec.values.sum))
-    //    println("Folded subClSpending: " + fractionalCustomers.values.foldLeft(0.0)(_ + _.subClSpending.vec.values.sum))
 
     // More assertions:
     assert(Math.abs(customersCard -
@@ -210,39 +221,23 @@ object ProjectMMD {
     val adjustedFractionalSubClSpendingsTotal = fractionalSubClSpendingsTotal.vec
       .mapValues(customersCard / _)
 
-    // normalize on product's popularity
+    // // Get normalized customers fractional spending vectors
     val normalizedFractionalCustomers = fractionalCustomers.mapValues(
       c => Customer(c.clSpending * adjustedFractionalClSpendingsTotal,
         c.subClSpending * adjustedFractionalSubClSpendingsTotal)
     )
-
-    // Print customers sample
-    //    println("\n************ Customers sample ****************\n")
-    //    customers
-    //      .mapValues(_.idsToStrings(taxonomy))
-    //      .take(sampleSize).foreach(println)
-    //
-    //    println("\n******** Fractional Customers sample *********\n")
-    //    fractionalCustomers
-    //      .mapValues(_.idsToStrings(taxonomy))
-    //      .take(sampleSize).foreach(println)
-    //
-    //    println("\n*** Normalized Fractional Customers sample ***\n")
-    //    normalizedFractionalCustomers
-    //      .mapValues(_.idsToStrings(taxonomy))
-    //      .take(sampleSize).foreach(println)
 
     /** *******************************
       * ** Association Rules Mining ***
       * *******************************/
 
     // RDD with distinct subclasses ids for each transaction
-    val subClassesRDD = transformedBasketsRDD
-      .map(_.distinct)
+    val subClassesRDD: RDD[Array[Int]] = assignedSubClassesBasketsRDD
+      .map { case (_, v) => v.distinct }
       .cache()
 
     // RDD with distinct classes ids for each transaction
-    val classesRDD = subClassesRDD
+    val classesRDD: RDD[Array[Int]] = subClassesRDD
       .map(b => b.map(subCl => subClassesToClassesB.value.getOrElse(subCl, -1)).distinct)
       .cache()
 
@@ -268,7 +263,7 @@ object ProjectMMD {
           .flatMap(_.consequent).flatMap(cl => classesToSubClassesB.value.getOrElse(cl, List[Int]()))
           .toSet -- prodDirectlyAssociatedSubClasses
 
-        // compute score for P^(n) vector
+        // Compute score for P^(n) vector
         (prodId,
           (Product(Map[Int, Double]())
             + prodIndirectlyAssociatedSubClasses.map(x => x -> .25).toMap // within subclass of associated class
@@ -279,12 +274,6 @@ object ProjectMMD {
       }
     }
 
-    //    println("\n\n**** Products Vectors ****\n\n")
-    //    transformedProductsRDD.collect().foreach(prod => {
-    //      println(s"Product ID: ${prod._1}\n\tVector: ${prod._2}\n")
-    //    })
-
-
     /** *****************
       * ** Clustering ***
       * *****************/
@@ -294,13 +283,12 @@ object ProjectMMD {
     })
 
     //    println("\n\n****** Clustering using customers' normalized fractional class spendings ******\n\n")
-
-    // Calculate WSSSE for different values of k
+    //
+    //    // Calculate WSSSE for different values of k
     //    Range(1, 21).foreach(clusterSize => {
     //      val clusters = findClusters(parsedData, clusterSize, iterationsNum)
     //      // Evaluate clustering by computing Within Set Sum of Squared Errors
-    //      println(s"Cluster size: $clusterSize")
-    //      println(s"Within Set Sum of Squared Errors = ${clusters.computeCost(parsedData)}\n")
+    //      println(s"Cluster size: $clusterSize  WSSSE: ${clusters.computeCost(parsedData)}")
     //    })
 
 
@@ -308,26 +296,83 @@ object ProjectMMD {
       * ** Products recommendations ***
       * *******************************/
 
+
+    val targetVec = normalizedFractionalCustomers.getOrElse(params.target,
+      Customer(Spending[Int](), Spending[Int]())).subClSpending.vec
+    val previousPurchasedProducts: Set[Int] = assignedBasketsRDD.
+      filter { case (customerId, _) => 0 == customerId }
+      .flatMap { case (_, basket) => basket }
+      .collect().toSet
+    val targetVecB = sc.broadcast(targetVec)
+
     val initialResults = transformedProductsRDD.map {
       case (prodId, prod) => prodId -> computeSimilarity(
-        normalizedFractionalCustomers.getOrElse(params.target,
-          Customer[Int](Spending(), Spending())
-        ), prod
-      )
+        targetVecB.value, prod.vec)
     }
 
-    println(initialResults)
+    // Sort results by descending similarity
+    val sortedResults = initialResults.collect().sortBy(_._2).toList
+
+    // Get filtered results
+    val filteredResults = Filter(sortedResults, previousPurchasedProducts, taxonomy)
+      .applyFilter.results
+
+    println("\n\n***** Products Recommendations *****\n")
+    println(s"For customer id: ${params.target}\n")
+    filteredResults.foreach { case (k, v) =>
+      val subClassId = taxonomy.productsToSubClasses(k)
+      val classId = taxonomy.subClassesToClasses(subClassId)
+      val prodName = taxonomy.idsToProducts(k)
+      val className = taxonomy.idsToClasses(classId)
+      val subClassName = taxonomy.idsToSubClasses(subClassId)
+      println(s"ID: $k / Name: $prodName\n\tClass: $className\n\tSubclass: $subClassName\n\tSimilarity: $v")
+    }
+
     spark.stop()
 
   }
 
-  // Method to compute cosine similarity between a Customer object and a Product object
-  def computeSimilarity(customer: Customer[Int], product: Product[Int]): Double = {
+  case class Filter(input: List[(Int, Double)], previousPurchasedProducts: Set[Int],
+                    taxonomy: Taxonomy, classes: Map[Int, Int] = Map(),
+                    subClasses: Map[Int, Int] = Map(), results: List[(Int, Double)] = List()) {
+    val maxProductsPerProductSubClass = 3
+    val maxProductsPerProductClass = 5
+
+    // Apply constraints for results
+    // 6th line from the bottom of page 11 of paper
+    def applyFilter: Filter = {
+      if (input.isEmpty)
+        this
+      else {
+        val prodId = input.head._1
+        val prodSubClass = taxonomy.productsToSubClasses.getOrElse(prodId, -1)
+        val prodClass = taxonomy.subClassesToClasses.getOrElse(prodSubClass, -1)
+        val prodSubClassesCard = classes.getOrElse(prodClass, 0)
+        val prodClassesCard = classes.getOrElse(prodClass, 0)
+
+        if (previousPurchasedProducts.contains(prodId) ||
+          prodSubClassesCard >= maxProductsPerProductSubClass ||
+          prodClassesCard >= maxProductsPerProductClass)
+          this.copy(input.tail, previousPurchasedProducts, taxonomy,
+            classes, subClasses, results)
+        else
+          this.copy(input.tail, previousPurchasedProducts, taxonomy,
+            classes.updated(prodClass, prodClassesCard + 1),
+            subClasses.updated(prodSubClass, prodSubClassesCard + 1),
+            results ++ List(input.head))
+      }
+    }
+  }
+
+  // Method to compute cosine similarity between two vectors represented as Map objects
+  def computeSimilarity(map1: Map[Int, Double], map2: Map[Int, Double]): Double = {
     def dotProduct[A](map1: Map[A, Double], map2: Map[A, Double]): Map[A, Double] =
       map1.foldLeft(map1)((acc, i) => acc.updated(i._1, i._2 * map2.getOrElse(i._1, 0.0)))
 
-    val numerator = dotProduct(customer.subClSpending.vec, product.vec).values.sum
-    val denominator = customer.subClSpending.normL2 * product.normL2
+    def normL2(m: Map[Int, Double]): Double = Math.sqrt(m.values.map(x => x * x).sum)
+
+    val numerator = dotProduct(map1, map2).values.sum
+    val denominator = normL2(map1) * normL2(map2)
     numerator / denominator
   }
 

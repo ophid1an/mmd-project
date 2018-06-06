@@ -3,8 +3,6 @@ package project
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 
 case class Spending[A](vec: Map[A, Double]) {
-  lazy val normL2: Double = Math.sqrt(vec.values.map(x => x * x).sum)
-
   // TODO change cnt to sum
   def cnt: Double = vec.values.sum
 
@@ -28,22 +26,6 @@ case class Spending[A](vec: Map[A, Double]) {
     }
     Vectors.sparse(size, modifiedVec.toSeq.asInstanceOf[Seq[(Int, Double)]])
   }
-
-  def toClString(taxonomy: Taxonomy): Spending[String] =
-    this.copy(vec.map {
-      case (k, v) => k match {
-        case i: Int => taxonomy.idsToClasses.getOrElse(i, "") -> v
-        case _ => sys.error("Spending[A] with A != Int.")
-      }
-    })
-
-  def toSubClString(taxonomy: Taxonomy): Spending[String] =
-    this.copy(vec.map {
-      case (k, v) => k match {
-        case i: Int => taxonomy.idsToSubClasses.getOrElse(i, "") -> v
-        case _ => sys.error("Spending[A] with A != Int.")
-      }
-    })
 
   private def multiplyMaps[A](map1: Map[A, Double], map2: Map[A, Double]): Map[A, Double] =
     map1.foldLeft(map1)((acc, i) => acc.updated(i._1, i._2 * map2.getOrElse(i._1, 1.0)))
