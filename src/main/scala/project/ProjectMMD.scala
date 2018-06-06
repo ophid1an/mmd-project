@@ -288,7 +288,7 @@ object ProjectMMD {
       * *****************/
 
     val parsedData = sc.parallelize(normalizedFractionalCustomers.toSeq.map {
-      case (_, v) => v.clSpending.sparseVec(productsB.value.size)
+      case (_, v) => v.clSpending.sparseVec(classesToSubClassesB.value.size)
     })
 
 //    println("\n\n****** Clustering using customers' normalized fractional class spendings ******\n\n")
