@@ -3,8 +3,7 @@ package project
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 
 case class Spending[A](vec: Map[A, Double]) {
-  // TODO change cnt to sum
-  def cnt: Double = vec.values.sum
+  def sum: Double = vec.values.sum
 
   def ++(other: Spending[A]): Spending[A] =
     this.copy(Spending.mergeMaps(vec, other.vec))
@@ -12,7 +11,7 @@ case class Spending[A](vec: Map[A, Double]) {
   def *(other: Map[A, Double]): Spending[A] = // Is not commutative!!!
     this.copy(multiplyMaps(vec, other))
 
-  def fractional: Spending[A] = this.copy(vec.mapValues(_ / cnt))
+  def fractional: Spending[A] = this.copy(vec.mapValues(_ / sum))
 
   // Get MLlib sparse vector used for clustering
   def sparseVec(size: Int): Vector = {

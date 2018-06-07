@@ -23,6 +23,9 @@ object ProjectMMD {
                      // Number of clusters
                      clustersNum: Int = 7,
 
+                     // Number of iterations for KMeans
+                     iterationsNum: Int = 20,
+
                      // FP-growth minSupport
                      minSupport: Double = 0.04,
 
@@ -44,7 +47,7 @@ object ProjectMMD {
     val defaultParams = Params()
 
     val parser = new OptionParser[Params]("mmd-project") {
-      head("Project for the Mining of Massive Datasets course.")
+      head("Personalization of Supermarket Product Recommendations")
       opt[Int]("target")
         .text(s"Target customer ID for whom to provide recommendations, default: ${defaultParams.target}")
         .action((x, c) => c.copy(target = x))
@@ -57,6 +60,9 @@ object ProjectMMD {
       opt[Int]("clusters")
         .text(s"number of customer clusters, default: ${defaultParams.clustersNum}")
         .action((x, c) => c.copy(clustersNum = x))
+      opt[Int]("iterations")
+        .text(s"number of iterations for KMeans, default: ${defaultParams.iterationsNum}")
+        .action((x, c) => c.copy(iterationsNum = x))
       opt[Double]("support")
         .text(s"minimal support level, default: ${defaultParams.minSupport}")
         .action((x, c) => c.copy(minSupport = x))
@@ -100,7 +106,6 @@ object ProjectMMD {
     sc.setLogLevel("ERROR")
 
     val sampleSize = 5 // Size for samples
-    val iterationsNum = 20 // Iterations for KMeans
     val numPartitions = spark.sparkContext.defaultParallelism // Partitions number for FP-growth
     val maxAbsDeviation = 0.0000001 // Used for assertions
 
@@ -147,6 +152,7 @@ object ProjectMMD {
       .cache()
 
     // Assign each transaction to a customer id
+    // NOTE: Customers cardinality may be less than customersMaxCard
     val assignedBasketsRDD: RDD[(Int, Array[Int])] = convertedBasketsRDD
       .map(b => getRandomId -> b)
       .cache()
@@ -157,8 +163,7 @@ object ProjectMMD {
         .map(prodId => productsToSubClassesB.value.getOrElse(prodId, -1)))
       .cache()
 
-    // Transform each assigned transaction to a customer spending vector and
-    // NOTE: Customers cardinality may be less than customersMaxCard
+    // Transform each assigned transaction to a customer spending vector
     val assignedAndTransformedBasketsRDD: RDD[(Int, Customer[Int])] = assignedSubClassesBasketsRDD
       .mapValues(b => {
         val clArr = b.map(subClassesToClassesB.value.getOrElse(_, -1))
@@ -190,11 +195,11 @@ object ProjectMMD {
     )
 
     assert(basketsRDD.map(_.length).sum ==
-      customers.values.foldLeft(0.0)(_ + _.clSpending.cnt)
+      customers.values.foldLeft(0.0)(_ + _.clSpending.sum)
     )
 
     assert(basketsRDD.map(_.length).sum ==
-      customers.values.foldLeft(0.0)(_ + _.subClSpending.cnt)
+      customers.values.foldLeft(0.0)(_ + _.subClSpending.sum)
     )
 
     // Get customers fractional spending vectors
@@ -286,7 +291,7 @@ object ProjectMMD {
     //
     //    // Calculate WSSSE for different values of k
     //    Range(1, 21).foreach(clusterSize => {
-    //      val clusters = findClusters(parsedData, clusterSize, iterationsNum)
+    //      val clusters = findClusters(parsedData, clusterSize, params.iterationsNum)
     //      // Evaluate clustering by computing Within Set Sum of Squared Errors
     //      println(s"Cluster size: $clusterSize  WSSSE: ${clusters.computeCost(parsedData)}")
     //    })
@@ -301,7 +306,7 @@ object ProjectMMD {
       Customer(Spending[Int](), Spending[Int]())).subClSpending.vec
 
     if (targetVec.isEmpty) {
-      println("***** Unfortunately there is no customer with such ID *****")
+      println("***** There is no customer with this ID! *****")
       sys.exit(1)
     }
 

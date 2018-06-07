@@ -6,6 +6,6 @@ case class Product[A](vec: Map[A, Double] = Map()) {
     if (intersection.isEmpty)
       this.copy(vec ++ other)
     else
-      sys.error("Product.+ with a map with common key.")
+      sys.error("Product.+ operates on a Map with no common keys with the Product object.")
   }
 }
