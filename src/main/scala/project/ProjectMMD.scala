@@ -366,13 +366,12 @@ object ProjectMMD {
           prodSubClassesCard >= maxProductsPerProductSubClass ||
           prodClassesCard >= maxProductsPerProductClass
         )
-          this.copy(input.tail, previousPurchasedProducts, taxonomy,
-            classes, subClasses, results).applyFilter
+          this.copy(input = input.tail).applyFilter
         else
-          this.copy(input.tail, previousPurchasedProducts, taxonomy,
-            classes.updated(prodClass, prodClassesCard + 1),
-            subClasses.updated(prodSubClass, prodSubClassesCard + 1),
-            results ++ List(input.head)).applyFilter
+          this.copy(input = input.tail,
+            classes = classes.updated(prodClass, prodClassesCard + 1),
+            subClasses = subClasses.updated(prodSubClass, prodSubClassesCard + 1),
+            results = results ++ List(input.head)).applyFilter
       }
     }
   }
