@@ -180,10 +180,6 @@ object ProjectMMD {
 
     val customersCard = customers.size
 
-    // Alert if customers cardinality is less than customersMaxCard
-    if (customersCard != params.customersMaxCard)
-      println("***** Number of customers doesn't equal customersMaxCard *****")
-
     // Assertions:
 
     assert(basketsRDD.map(_.length).sum ==
@@ -297,26 +293,44 @@ object ProjectMMD {
     //    })
 
     /** *******************************
+      * ******** General info ********
+      * *******************************/
+
+    println("\n*************** Parameters ***************\n")
+    println(s"Seed: ${params.seed}")
+    println(s"Number of customers: ${params.customersMaxCard}")
+    if (customersCard != params.customersMaxCard)
+      println(s"##### Actual number of customers: ${customers.size} #####")
+    println(s"Minimal support level: ${params.minSupport}")
+    println(s"Minimal confidence: ${params.minConfidence}")
+    println(s"Transactions file path: ${params.basketsPath}")
+    println(s"Products file path: ${params.productsPath}")
+    println(s"\nSome customers ID found: ${customers.take(sampleSize).keySet.mkString(", ")}")
+
+    /** *******************************
       * ******** Customer info ********
       * *******************************/
 
+    println("\n*************** Customer info ***************\n")
+
     // Get target customer, otherwise get a random one
     val actualTarget: (Int, Customer[Int]) =
-    normalizedFractionalCustomers.get(params.target) match {
-      case Some(c: Customer[Int]) => params.target -> c
-      case _ => normalizedFractionalCustomers.head
-    }
+      normalizedFractionalCustomers.get(params.target) match {
+        case Some(c: Customer[Int]) => params.target -> c
+        case _ => normalizedFractionalCustomers.head
+      }
 
     if (actualTarget._1 != params.target)
-      println(s"***** Customer ID: ${params.target} not found *****")
+      println(s"##### Customer ID: ${params.target} not found #####")
 
     println(s"Using customer ID: ${actualTarget._1}")
 
     /** *******************************
       * ** Products recommendations ***
       * *******************************/
+
     val previouslyPurchasedProducts: Set[Int] = assignedBasketsRDD.
-    filter { case (customerId, _) => actualTarget._1 == customerId }
+      filter { case (customerId, _) => actualTarget._1 == customerId }
       .flatMap { case (_, basket) => basket }
       .collect().toSet
 
@@ -335,7 +349,7 @@ object ProjectMMD {
     val filteredResults = Filter(sortedResults, previouslyPurchasedProducts, taxonomy)
       .applyFilter.results
 
-    println("\n\n***** Products Recommendations *****\n")
+    println("\n*************** Products Recommendations ***************\n")
     filteredResults.foreach { case (k, v) =>
       val subClassId = taxonomy.productsToSubClasses(k)
       val classId = taxonomy.subClassesToClasses(subClassId)
