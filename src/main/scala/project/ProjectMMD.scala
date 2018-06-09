@@ -311,7 +311,7 @@ object ProjectMMD {
     }
 
     val previousPurchasedProducts: Set[Int] = assignedBasketsRDD.
-      filter { case (customerId, _) => 0 == customerId }
+      filter { case (customerId, _) => params.target == customerId }
       .flatMap { case (_, basket) => basket }
       .collect().toSet
     val targetVecB = sc.broadcast(targetVec)
