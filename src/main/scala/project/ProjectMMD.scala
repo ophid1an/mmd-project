@@ -358,13 +358,18 @@ object ProjectMMD {
     // Use customer's subClSpending vector
     val targetVecB = sc.broadcast(actualTarget._2)
 
-    val initialResults = transformedProductsRDD.map {
-      case (prodId, prod) => prodId -> computeSimilarity(
-        targetVecB.value, prod.vec)
-    }
+    // Get initials results discarding products
+    // with zero similarity to customer
+    val initialResults = transformedProductsRDD
+      .map {
+        case (prodId, prod) => prodId -> computeSimilarity(
+          targetVecB.value, prod.vec)
+      }
+      .filter(_._2 != 0.0)
+      .collect()
 
     // Sort results by descending similarity
-    val sortedResults = initialResults.collect().sortWith(_._2 > _._2).toList
+    val sortedResults = initialResults.sortWith(_._2 > _._2)
 
     // Get filtered results
     val filteredResults = Filter(sortedResults, previouslyPurchasedProducts, taxonomy)
@@ -388,7 +393,7 @@ object ProjectMMD {
 
   }
 
-  case class Filter(input: List[(Int, Double)], previousPurchasedProducts: Set[Int],
+  case class Filter(input: Array[(Int, Double)], previousPurchasedProducts: Set[Int],
                     taxonomy: Taxonomy, classes: Map[Int, Int] = Map(),
                     subClasses: Map[Int, Int] = Map(), results: List[(Int, Double)] = List()) {
     val maxProductsPerProductSubClass = 1
