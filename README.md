@@ -3,6 +3,9 @@
 ## Description
 Implementation of a personalized recommender system based on the system described by (Lawrence, R. D. et al. 2001).
 
+## Usage
+Build with `sbt package`, run with `./run.sh` or get detailed usage info with `./run.sh --help`
+
 ## Contributors
 * [Aristeidis Bozas](https://github.com/arbozas)
 * [Ioannis Deliakos](https://github.com/iodel)
