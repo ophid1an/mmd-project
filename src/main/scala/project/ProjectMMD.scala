@@ -296,25 +296,32 @@ object ProjectMMD {
     //      println(s"Cluster size: $clusterSize  WSSSE: ${clusters.computeCost(parsedData)}")
     //    })
 
+    /** *******************************
+      * ******** Customer info ********
+      * *******************************/
+
+    // Get target customer, otherwise get a random one
+    val actualTarget: (Int, Customer[Int]) =
+    normalizedFractionalCustomers.get(params.target) match {
+      case Some(c: Customer[Int]) => params.target -> c
+      case _ => normalizedFractionalCustomers.head
+    }
+
+    if (actualTarget._1 != params.target)
+      println(s"***** Customer ID: ${params.target} not found *****")
+
+    println(s"Using customer ID: ${actualTarget._1}")
 
     /** *******************************
       * ** Products recommendations ***
       * *******************************/
-
-
-    val targetVec = normalizedFractionalCustomers.getOrElse(params.target,
-      Customer(Spending[Int](), Spending[Int]())).subClSpending.vec
-
-    if (targetVec.isEmpty) {
-      println("***** There is no customer with this ID! *****")
-      sys.exit(1)
-    }
-
-    val previousPurchasedProducts: Set[Int] = assignedBasketsRDD.
-      filter { case (customerId, _) => params.target == customerId }
+    val previouslyPurchasedProducts: Set[Int] = assignedBasketsRDD.
+    filter { case (customerId, _) => actualTarget._1 == customerId }
       .flatMap { case (_, basket) => basket }
       .collect().toSet
-    val targetVecB = sc.broadcast(targetVec)
+
+    // Use customer's subClSpending vector
+    val targetVecB = sc.broadcast(actualTarget._2.subClSpending.vec)
 
     val initialResults = transformedProductsRDD.map {
       case (prodId, prod) => prodId -> computeSimilarity(
@@ -325,11 +332,10 @@ object ProjectMMD {
     val sortedResults = initialResults.collect().sortWith(_._2 > _._2).toList
 
     // Get filtered results
-    val filteredResults = Filter(sortedResults, previousPurchasedProducts, taxonomy)
+    val filteredResults = Filter(sortedResults, previouslyPurchasedProducts, taxonomy)
       .applyFilter.results
 
     println("\n\n***** Products Recommendations *****\n")
-    println(s"For customer id: ${params.target}\n")
     filteredResults.foreach { case (k, v) =>
       val subClassId = taxonomy.productsToSubClasses(k)
       val classId = taxonomy.subClassesToClasses(subClassId)
