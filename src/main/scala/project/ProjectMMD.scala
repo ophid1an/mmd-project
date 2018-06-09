@@ -21,10 +21,10 @@ object ProjectMMD {
                      customersMaxCard: Int = 100,
 
                      // Number of clusters
-                     clustersNum: Int = 7,
+                     //                     clustersNum: Int = 7,
 
                      // Number of iterations for KMeans
-                     iterationsNum: Int = 20,
+                     //                     iterationsNum: Int = 20,
 
                      // FP-growth minSupport
                      minSupport: Double = 0.04,
@@ -57,12 +57,12 @@ object ProjectMMD {
       opt[Int]("customers")
         .text(s"customers maximum cardinality, default: ${defaultParams.customersMaxCard}")
         .action((x, c) => c.copy(customersMaxCard = x))
-      opt[Int]("clusters")
-        .text(s"number of customer clusters, default: ${defaultParams.clustersNum}")
-        .action((x, c) => c.copy(clustersNum = x))
-      opt[Int]("iterations")
-        .text(s"number of iterations for KMeans, default: ${defaultParams.iterationsNum}")
-        .action((x, c) => c.copy(iterationsNum = x))
+      //      opt[Int]("clusters")
+      //        .text(s"number of customer clusters, default: ${defaultParams.clustersNum}")
+      //        .action((x, c) => c.copy(clustersNum = x))
+      //      opt[Int]("iterations")
+      //        .text(s"number of iterations for KMeans, default: ${defaultParams.iterationsNum}")
+      //        .action((x, c) => c.copy(iterationsNum = x))
       opt[Double]("support")
         .text(s"minimal support level, default: ${defaultParams.minSupport}")
         .action((x, c) => c.copy(minSupport = x))
@@ -279,9 +279,9 @@ object ProjectMMD {
       * ** Clustering ***
       * *****************/
 
-    val parsedData = sc.parallelize(normalizedFractionalCustomers.toSeq.map {
-      case (_, v) => v.clSpending.sparseVec(classesToSubClassesB.value.size)
-    })
+    //    val parsedData = sc.parallelize(normalizedFractionalCustomers.toSeq.map {
+    //      case (_, v) => v.clSpending.sparseVec(classesToSubClassesB.value.size)
+    //    })
 
     //    println("\n\n****** Clustering using customers' normalized fractional class spendings ******\n\n")
     //
