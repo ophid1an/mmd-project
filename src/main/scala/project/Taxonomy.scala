@@ -5,6 +5,7 @@ case class Taxonomy(products: Map[String, Int] = Map(), classes: Map[String, Int
                     productsToSubClasses: Map[Int, Int] = Map(),
                     subClassesToClasses: Map[Int, Int] = Map()
                    ) {
+  lazy val subClassesToProducts: Map[Int, List[Int]] = invertMap(productsToSubClasses)
   lazy val classesToSubClasses: Map[Int, List[Int]] = invertMap(subClassesToClasses)
   lazy val idsToSubClasses: Map[Int, String] = invertMap(subClasses).map { case (k, v) => k -> v.head }
   lazy val idsToClasses: Map[Int, String] = invertMap(classes).map { case (k, v) => k -> v.head }

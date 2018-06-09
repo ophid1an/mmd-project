@@ -305,7 +305,7 @@ object ProjectMMD {
     println(s"Minimal confidence: ${params.minConfidence}")
     println(s"Transactions file path: ${params.basketsPath}")
     println(s"Products file path: ${params.productsPath}")
-    println(s"\nSome customers ID found: ${customers.take(sampleSize).keySet.mkString(", ")}")
+    println(s"\n$sampleSize customers IDs which were assigned: ${customers.take(sampleSize).keySet.mkString(", ")}")
 
     /** *******************************
       * ******** Customer info ********
@@ -313,17 +313,38 @@ object ProjectMMD {
 
     println("\n*************** Customer info ***************\n")
 
-    // Get target customer, otherwise get a random one
-    val actualTarget: (Int, Customer[Int]) =
-      normalizedFractionalCustomers.get(params.target) match {
-        case Some(c: Customer[Int]) => params.target -> c
-        case _ => normalizedFractionalCustomers.head
-      }
+    // Get target customer subClSpending vector, otherwise
+    // change customer to a random one and get his vector
+    val actualTarget: (Int, Map[Int, Double]) =
+    normalizedFractionalCustomers.get(params.target) match {
+      case Some(c: Customer[Int]) => params.target -> c.subClSpending.vec
+      case _ => normalizedFractionalCustomers.take(1)
+        .mapValues(_.subClSpending.vec).head
+    }
 
     if (actualTarget._1 != params.target)
       println(s"##### Customer ID: ${params.target} not found #####")
 
     println(s"Using customer ID: ${actualTarget._1}")
+
+    println(s"\n***** Top $sampleSize customer's subclasses spending info *****")
+    actualTarget._2.toList.sortWith(_._2 > _._2).take(sampleSize).foreach(
+      elem => {
+        val subClassId = elem._1
+        val spending = elem._2
+        val subClassName = taxonomy.idsToSubClasses(subClassId)
+        val parentClassId = taxonomy.subClassesToClasses(subClassId)
+        val parentClassName = taxonomy.idsToClasses(parentClassId)
+        val containedProductsIds = taxonomy.subClassesToProducts
+          .getOrElse(subClassId, List[Int]())
+
+        println(f"\nID: $subClassId%5d / Name: $subClassName / Spending: $spending%.2f")
+        println(f"\tParent class ID: $parentClassId%5d / Name: $parentClassName")
+        println("\tProducts contained:")
+        containedProductsIds.foreach(prodId =>
+          println(f"\t\tID: $prodId%5d / Name: ${taxonomy.idsToProducts(prodId)}"))
+      }
+    )
 
     /** *******************************
       * ** Products recommendations ***
@@ -335,7 +356,7 @@ object ProjectMMD {
       .collect().toSet
 
     // Use customer's subClSpending vector
-    val targetVecB = sc.broadcast(actualTarget._2.subClSpending.vec)
+    val targetVecB = sc.broadcast(actualTarget._2)
 
     val initialResults = transformedProductsRDD.map {
       case (prodId, prod) => prodId -> computeSimilarity(
@@ -349,16 +370,19 @@ object ProjectMMD {
     val filteredResults = Filter(sortedResults, previouslyPurchasedProducts, taxonomy)
       .applyFilter.results
 
-    println("\n*************** Products Recommendations ***************\n")
-    filteredResults.foreach { case (k, v) =>
-      val subClassId = taxonomy.productsToSubClasses(k)
+    println("\n*************** Products Recommendations ***************")
+    filteredResults.foreach { case (prodId, similarity) =>
+      val subClassId = taxonomy.productsToSubClasses(prodId)
       val classId = taxonomy.subClassesToClasses(subClassId)
-      val prodName = taxonomy.idsToProducts(k)
+      val prodName = taxonomy.idsToProducts(prodId)
       val className = taxonomy.idsToClasses(classId)
       val subClassName = taxonomy.idsToSubClasses(subClassId)
-      println(s"ID: $k / Name: $prodName\n\tClass: $className\n\tSubclass: $subClassName\n\tSimilarity: $v")
+      println(f"\nID: $prodId%5d / Name: $prodName")
+      println(f"\tSubclass ID: $subClassId%5d / Name: $subClassName")
+      println(f"\tClass ID: $classId%5d / Name: $className")
+      println(s"\tSimilarity: $similarity")
     }
-    println(s"\nNumber of recommendations: ${filteredResults.size}")
+    println(s"\nNumber of recommendations: ${filteredResults.size}\n")
 
     spark.stop()
 
