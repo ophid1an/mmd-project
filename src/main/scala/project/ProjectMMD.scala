@@ -339,7 +339,7 @@ object ProjectMMD {
     println("*** containing products not previously purchased ***")
     FilterSubClSpending(actualTarget._2.toList.sortWith(_._2 > _._2)
       , previouslyPurchasedProducts, taxonomy, sampleSize)
-      .applyFilter
+      .apply
       .results
       .foreach(
         elem => {
@@ -384,7 +384,7 @@ object ProjectMMD {
 
     // Get filtered results
     val filteredResults = FilterRecommendations(sortedResults, previouslyPurchasedProducts, taxonomy)
-      .applyFilter.results
+      .apply.results
 
     println("\n*************** Products Recommendations ***************")
     filteredResults.foreach { case (prodId, similarity) =>
@@ -412,7 +412,7 @@ object ProjectMMD {
 
     // Apply constraints for results
     // 6th line from the bottom of page 11 of paper
-    def applyFilter: FilterRecommendations = {
+    def apply: FilterRecommendations = {
       if (input.isEmpty)
         this
       else {
@@ -426,12 +426,12 @@ object ProjectMMD {
           prodSubClassesCard >= maxProductsPerProductSubClass ||
           prodClassesCard >= maxProductsPerProductClass
         )
-          this.copy(input = input.tail).applyFilter
+          this.copy(input = input.tail).apply
         else
           this.copy(input = input.tail,
             classes = classes.updated(prodClass, prodClassesCard + 1),
             subClasses = subClasses.updated(prodSubClass, prodSubClassesCard + 1),
-            results = results ++ List(input.head)).applyFilter
+            results = results ++ List(input.head)).apply
       }
     }
   }
@@ -445,7 +445,7 @@ object ProjectMMD {
 
     // Get top maxSubClasses subclasses spendings which have at least
     // one product customer hasn't bought before
-    def applyFilter: FilterSubClSpending = {
+    def apply: FilterSubClSpending = {
       if (results.size >= maxSubClasses || input.isEmpty)
         this
       else {
@@ -455,10 +455,10 @@ object ProjectMMD {
 
         if (containedProductsIds.intersect(previousPurchasedProducts).size ==
           containedProductsIds.size)
-          this.copy(input = input.tail).applyFilter
+          this.copy(input = input.tail).apply
         else
           this.copy(input = input.tail,
-            results = results ++ List(input.head)).applyFilter
+            results = results ++ List(input.head)).apply
       }
     }
   }
