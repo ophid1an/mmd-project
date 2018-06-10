@@ -300,8 +300,8 @@ object ProjectMMD {
     println(s"Seed: ${params.seed}")
     println(s"Number of customers: ${params.customersMaxCard}")
     if (customersCard != params.customersMaxCard) {
-      println(s"##### Actual number of customers: ${customers.size} #####")
-      println(s"\n$sampleSize customers IDs which were assigned: ${customers.take(sampleSize).keySet.mkString(", ")}")
+      println(s"\n##### Actual number of customers: ${customers.size} #####")
+      println(s"$sampleSize customers IDs which were assigned: ${customers.take(sampleSize).keySet.mkString(", ")}\n")
     }
     println(s"Minimal support level: ${params.minSupport}")
     println(s"Minimal confidence: ${params.minConfidence}")
