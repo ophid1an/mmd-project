@@ -299,13 +299,15 @@ object ProjectMMD {
     println("\n*************** Parameters ***************\n")
     println(s"Seed: ${params.seed}")
     println(s"Number of customers: ${params.customersMaxCard}")
-    if (customersCard != params.customersMaxCard)
+    if (customersCard != params.customersMaxCard) {
       println(s"##### Actual number of customers: ${customers.size} #####")
+      println(s"\n$sampleSize customers IDs which were assigned: ${customers.take(sampleSize).keySet.mkString(", ")}")
+    }
     println(s"Minimal support level: ${params.minSupport}")
     println(s"Minimal confidence: ${params.minConfidence}")
     println(s"Transactions file path: ${params.basketsPath}")
     println(s"Products file path: ${params.productsPath}")
-    println(s"\n$sampleSize customers IDs which were assigned: ${customers.take(sampleSize).keySet.mkString(", ")}")
+
 
     /** *******************************
       * ******** Customer info ********
@@ -313,7 +315,7 @@ object ProjectMMD {
 
     println("\n*************** Customer info ***************\n")
 
-    // Get target customer subClSpending vector, otherwise
+    // Get target customer's subClSpending vector, otherwise
     // change customer to a random one and get his vector
     val actualTarget: (Int, Map[Int, Double]) =
     normalizedFractionalCustomers.get(params.target) match {
@@ -322,38 +324,47 @@ object ProjectMMD {
         .mapValues(_.subClSpending.vec).head
     }
 
+    // Get target customer's previously purchased products set
+    val previouslyPurchasedProducts: Set[Int] = assignedBasketsRDD.
+      filter { case (customerId, _) => actualTarget._1 == customerId }
+      .flatMap { case (_, basket) => basket }
+      .collect().toSet
+
     if (actualTarget._1 != params.target)
       println(s"##### Customer ID: ${params.target} not found #####")
 
     println(s"Using customer ID: ${actualTarget._1}")
 
     println(s"\n***** Top $sampleSize customer's subclasses spending info *****")
-    actualTarget._2.toList.sortWith(_._2 > _._2).take(sampleSize).foreach(
-      elem => {
-        val subClassId = elem._1
-        val spending = elem._2
-        val subClassName = taxonomy.idsToSubClasses(subClassId)
-        val parentClassId = taxonomy.subClassesToClasses(subClassId)
-        val parentClassName = taxonomy.idsToClasses(parentClassId)
-        val containedProductsIds = taxonomy.subClassesToProducts
-          .getOrElse(subClassId, List[Int]())
+    println("*** containing products not previously purchased ***")
+    FilterSubClSpending(actualTarget._2.toList.sortWith(_._2 > _._2)
+      , previouslyPurchasedProducts, taxonomy, sampleSize)
+      .applyFilter
+      .results
+      .foreach(
+        elem => {
+          val subClassId = elem._1
+          val spending = elem._2
+          val subClassName = taxonomy.idsToSubClasses(subClassId)
+          val parentClassId = taxonomy.subClassesToClasses(subClassId)
+          val parentClassName = taxonomy.idsToClasses(parentClassId)
+          val containedProductsIds = taxonomy.subClassesToProducts
+            .getOrElse(subClassId, List[Int]())
 
-        println(f"\nID: $subClassId%5d / Name: $subClassName / Spending: $spending%.2f")
-        println(f"\tParent class ID: $parentClassId%5d / Name: $parentClassName")
-        println("\tProducts contained:")
-        containedProductsIds.foreach(prodId =>
-          println(f"\t\tID: $prodId%5d / Name: ${taxonomy.idsToProducts(prodId)}"))
-      }
-    )
+          println(f"\nID: $subClassId%5d / Name: $subClassName / Spending: $spending%.2f")
+          println(f"\tParent class ID: $parentClassId%5d / Name: $parentClassName")
+          println("\tProducts contained:")
+          // Output products not previously purchased
+          containedProductsIds.foreach(prodId =>
+            if (!previouslyPurchasedProducts.contains(prodId))
+              println(f"\t\tID: $prodId%5d / Name: ${taxonomy.idsToProducts(prodId)}")
+          )
+        }
+      )
 
     /** *******************************
       * ** Products recommendations ***
       * *******************************/
-
-    val previouslyPurchasedProducts: Set[Int] = assignedBasketsRDD.
-      filter { case (customerId, _) => actualTarget._1 == customerId }
-      .flatMap { case (_, basket) => basket }
-      .collect().toSet
 
     // Use customer's subClSpending vector
     val targetVecB = sc.broadcast(actualTarget._2)
@@ -372,7 +383,7 @@ object ProjectMMD {
     val sortedResults = initialResults.sortWith(_._2 > _._2)
 
     // Get filtered results
-    val filteredResults = Filter(sortedResults, previouslyPurchasedProducts, taxonomy)
+    val filteredResults = FilterRecommendations(sortedResults, previouslyPurchasedProducts, taxonomy)
       .applyFilter.results
 
     println("\n*************** Products Recommendations ***************")
@@ -393,15 +404,15 @@ object ProjectMMD {
 
   }
 
-  case class Filter(input: Array[(Int, Double)], previousPurchasedProducts: Set[Int],
-                    taxonomy: Taxonomy, classes: Map[Int, Int] = Map(),
-                    subClasses: Map[Int, Int] = Map(), results: List[(Int, Double)] = List()) {
+  case class FilterRecommendations(input: Array[(Int, Double)], previousPurchasedProducts: Set[Int],
+                                   taxonomy: Taxonomy, classes: Map[Int, Int] = Map(),
+                                   subClasses: Map[Int, Int] = Map(), results: List[(Int, Double)] = List()) {
     val maxProductsPerProductSubClass = 1
     val maxProductsPerProductClass = 2
 
     // Apply constraints for results
     // 6th line from the bottom of page 11 of paper
-    def applyFilter: Filter = {
+    def applyFilter: FilterRecommendations = {
       if (input.isEmpty)
         this
       else {
@@ -420,6 +431,33 @@ object ProjectMMD {
           this.copy(input = input.tail,
             classes = classes.updated(prodClass, prodClassesCard + 1),
             subClasses = subClasses.updated(prodSubClass, prodSubClassesCard + 1),
+            results = results ++ List(input.head)).applyFilter
+      }
+    }
+  }
+
+  case class FilterSubClSpending(
+                                  // Expected to be sorted by ._2 descending
+                                  input: List[(Int, Double)],
+                                  previousPurchasedProducts: Set[Int],
+                                  taxonomy: Taxonomy, maxSubClasses: Int,
+                                  results: List[(Int, Double)] = List()) {
+
+    // Get top maxSubClasses subclasses spendings which have at least
+    // one product customer hasn't bought before
+    def applyFilter: FilterSubClSpending = {
+      if (results.size >= maxSubClasses || input.isEmpty)
+        this
+      else {
+        val subClassId = input.head._1
+        val containedProductsIds = taxonomy.subClassesToProducts
+          .getOrElse(subClassId, List[Int]()).toSet
+
+        if (containedProductsIds.intersect(previousPurchasedProducts).size ==
+          containedProductsIds.size)
+          this.copy(input = input.tail).applyFilter
+        else
+          this.copy(input = input.tail,
             results = results ++ List(input.head)).applyFilter
       }
     }
