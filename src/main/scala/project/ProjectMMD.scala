@@ -337,10 +337,21 @@ object ProjectMMD {
 
     println(s"\n***** Top $sampleSize customer's subclasses spending info *****")
     println("*** containing products not previously purchased ***")
-    FilterSubClSpending(actualTarget._2.toList.sortWith(_._2 > _._2)
-      , previouslyPurchasedProducts, taxonomy, sampleSize)
-      .apply
-      .results
+    actualTarget._2.toList
+      // Get subclasses spendings which have at least
+      // one product customer hasn't purchased before
+      .filter(
+      spending => {
+        val containedProductsIds = taxonomy.subClassesToProducts
+          .getOrElse(spending._1, List[Int]()).toSet
+
+        containedProductsIds.intersect(previouslyPurchasedProducts).size !=
+          containedProductsIds.size
+      })
+      // then sort by spending value descending
+      .sortWith(_._2 > _._2)
+      // and take the top sampleSize
+      .take(sampleSize)
       .foreach(
         elem => {
           val subClassId = elem._1
@@ -431,33 +442,6 @@ object ProjectMMD {
           this.copy(input = input.tail,
             classes = classes.updated(prodClass, prodClassesCard + 1),
             subClasses = subClasses.updated(prodSubClass, prodSubClassesCard + 1),
-            results = results ++ List(input.head)).apply
-      }
-    }
-  }
-
-  case class FilterSubClSpending(
-                                  // Expected to be sorted by ._2 descending
-                                  input: List[(Int, Double)],
-                                  previousPurchasedProducts: Set[Int],
-                                  taxonomy: Taxonomy, maxSubClasses: Int,
-                                  results: List[(Int, Double)] = List()) {
-
-    // Get top maxSubClasses subclasses spendings which have at least
-    // one product customer hasn't bought before
-    def apply: FilterSubClSpending = {
-      if (results.size >= maxSubClasses || input.isEmpty)
-        this
-      else {
-        val subClassId = input.head._1
-        val containedProductsIds = taxonomy.subClassesToProducts
-          .getOrElse(subClassId, List[Int]()).toSet
-
-        if (containedProductsIds.intersect(previousPurchasedProducts).size ==
-          containedProductsIds.size)
-          this.copy(input = input.tail).apply
-        else
-          this.copy(input = input.tail,
             results = results ++ List(input.head)).apply
       }
     }
