@@ -4,7 +4,8 @@
 Implementation of a personalized recommender system based on the system described by (Lawrence, R. D. et al. 2001).
 
 ## Usage
-Build with `sbt package`, run with `./run.sh` or get detailed usage info with `./run.sh --help`
+Build with `sbt package`, run with `./run.sh` or get detailed usage info with `./run.sh --help`.
+If you are on JDK 18+, this repo sets `-Djava.security.manager=allow` via `.sbtopts` for sbt.
 
 ## Contributors
 * [Aristeidis Bozas](https://github.com/arbozas)
