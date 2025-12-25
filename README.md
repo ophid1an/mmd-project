@@ -5,7 +5,7 @@ Implementation of a personalized recommender system based on the system describe
 
 ## Usage
 Build with `sbt package`, run with `./run.sh` or get detailed usage info with `./run.sh --help`.
-If you are on JDK 18+, this repo sets `-Djava.security.manager=allow` via `.sbtopts` for sbt.
+`run.sh` uses `spark-submit --packages` to fetch `scopt` at runtime, so it requires network access.
 
 ## Contributors
 * [Aristeidis Bozas](https://github.com/arbozas)

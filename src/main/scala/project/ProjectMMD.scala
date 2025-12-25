@@ -199,7 +199,7 @@ object ProjectMMD {
     )
 
     // Get customers fractional spending vectors
-    val fractionalCustomers = customers.mapValues(_.fractional)
+    val fractionalCustomers = customers.map { case (k, v) => k -> v.fractional }
 
     // More assertions:
     assert(Math.abs(customersCard -
@@ -217,16 +217,19 @@ object ProjectMMD {
       .map(_.subClSpending).reduce(_ ++ _)
 
     val adjustedFractionalClSpendingsTotal = fractionalClSpendingsTotal.vec
-      .mapValues(customersCard / _)
+      .map { case (k, v) => k -> (customersCard / v) }
 
     val adjustedFractionalSubClSpendingsTotal = fractionalSubClSpendingsTotal.vec
-      .mapValues(customersCard / _)
+      .map { case (k, v) => k -> (customersCard / v) }
 
     // // Get normalized customers fractional spending vectors
-    val normalizedFractionalCustomers = fractionalCustomers.mapValues(
-      c => Customer(c.clSpending * adjustedFractionalClSpendingsTotal,
-        c.subClSpending * adjustedFractionalSubClSpendingsTotal)
-    )
+    val normalizedFractionalCustomers = fractionalCustomers.map {
+      case (k, c) =>
+        k -> Customer(
+          c.clSpending * adjustedFractionalClSpendingsTotal,
+          c.subClSpending * adjustedFractionalSubClSpendingsTotal
+        )
+    }
 
     /** *******************************
       * ** Association Rules Mining ***
@@ -321,7 +324,7 @@ object ProjectMMD {
     normalizedFractionalCustomers.get(params.target) match {
       case Some(c: Customer[Int]) => params.target -> c.subClSpending.vec
       case _ => normalizedFractionalCustomers.take(1)
-        .mapValues(_.subClSpending.vec).head
+        .map { case (k, v) => k -> v.subClSpending.vec }.head
     }
 
     // Get target customer's previously purchased products set
@@ -508,5 +511,4 @@ object ProjectMMD {
   }
 
 }
-
 

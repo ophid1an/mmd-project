@@ -14,9 +14,9 @@ case class Taxonomy(products: Map[String, Int] = Map(), classes: Map[String, Int
   def ++(other: Taxonomy): Taxonomy = {
     if (other.products.size == 1 && other.classes.size == 1 && other.subClasses.size == 1
       && other.subClassesToClasses.size == 1 && other.productsToSubClasses.size == 1) {
-      val newProducts = other.products.mapValues(_ => products.size) ++ products
-      val newClasses = other.classes.mapValues(_ => classes.size) ++ classes
-      val newSubClasses = other.subClasses.mapValues(_ => subClasses.size) ++ subClasses
+      val newProducts = other.products.map { case (k, _) => k -> products.size } ++ products
+      val newClasses = other.classes.map { case (k, _) => k -> classes.size } ++ classes
+      val newSubClasses = other.subClasses.map { case (k, _) => k -> subClasses.size } ++ subClasses
       val otherProductCorrectId = newProducts.getOrElse(other.products.keysIterator.next(), -1)
       val otherClassCorrectId = newClasses.getOrElse(other.classes.keysIterator.next(), -1)
       val otherSubClassCorrectId = newSubClasses.getOrElse(other.subClasses.keysIterator.next(), -1)

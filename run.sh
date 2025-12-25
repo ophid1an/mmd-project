@@ -1,3 +1,2 @@
 #!/bin/bash
-spark-submit --jars lib/scopt_native0.3_2.11-3.7.0.jar target/scala-2.11/mmd-project_2.11-0.1.jar "$@"
-
+spark-submit --packages com.github.scopt:scopt_2.13:4.1.0 target/scala-2.13/mmd-project_2.13-0.1.jar "$@"

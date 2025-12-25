@@ -11,7 +11,7 @@ case class Spending[A](vec: Map[A, Double]) {
   def *(other: Map[A, Double]): Spending[A] = // Is not commutative!!!
     this.copy(multiplyMaps(vec, other))
 
-  def fractional: Spending[A] = this.copy(vec.mapValues(_ / sum))
+  def fractional: Spending[A] = this.copy(vec.map { case (k, v) => k -> (v / sum) })
 
   // Get MLlib sparse vector used for clustering
   def sparseVec(size: Int): Vector = {
